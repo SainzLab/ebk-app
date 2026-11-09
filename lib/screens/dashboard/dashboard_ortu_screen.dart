@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../core/auth_service.dart';
 import '../../models/case_model.dart';
+import '../../models/student_model.dart';
+import '../../repositories/case_repository.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/case_card.dart';
@@ -48,12 +52,50 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
     CaseRecordModel.defaultCases[2],
   ];
 
+  late List<CaseRecordModel> _cases;
   late CaseRecordModel _selectedCase;
+  List<StudentDataModel> _children = const [];
 
   @override
   void initState() {
     super.initState();
-    _selectedCase = _parentCases.first;
+    _cases = List.from(_parentCases);
+    _selectedCase = _cases.first;
+    _loadOrtuDataFromPocketBase();
+  }
+
+  Future<void> _loadOrtuDataFromPocketBase() async {
+    try {
+      final myChildren = await StudentRepository.instance.getMyChildren();
+      final myCases = await CaseRepository.instance.getCases();
+      if (!mounted) return;
+      setState(() {
+        if (myChildren.isNotEmpty) {
+          _children = myChildren;
+        }
+        if (myCases.isNotEmpty) {
+          _cases = myCases;
+          _selectedCase = _cases.first;
+        }
+      });
+    } catch (_) {}
+  }
+
+  String get _greetingText {
+    final name = AuthService.instance.currentUser?.getStringValue('name') ?? '';
+    return name.isNotEmpty ? 'Halo, $name' : 'Halo, Ibu Siti Rahma';
+  }
+
+  String get _childrenSubtitle {
+    if (_children.isEmpty) {
+      return 'Wali dari Rizky Pratama • Kelas IX-B';
+    }
+    if (_children.length == 1) {
+      final c = _children.first;
+      return 'Wali dari ${c.name} • ${c.className}';
+    }
+    final names = _children.map((c) => c.name).join(', ');
+    return 'Wali dari ${_children.length} Siswa ($names)';
   }
 
   void _onNavTap(int index) {
@@ -62,7 +104,9 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
     });
   }
 
-  void _handleLogout() {
+  Future<void> _handleLogout() async {
+    await AuthService.instance.logout();
+    if (!mounted) return;
     if (widget.onLogout != null) {
       widget.onLogout!();
     } else {
@@ -139,20 +183,20 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                             onTap: () => setState(() => _selectedNavIndex = 3),
                           ),
                           const SizedBox(width: 12.0),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Halo, Ibu Siti Rahma',
+                                  _greetingText,
                                   style: AppTextStyles.greetingActor,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                SizedBox(height: 2.0),
+                                const SizedBox(height: 2.0),
                                 Text(
-                                  'Wali dari Rizky Pratama • Kelas IX-B',
+                                  _childrenSubtitle,
                                   style: AppTextStyles.subtitle11,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -223,33 +267,26 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                 ],
               ),
               const SizedBox(height: 10.0),
-              CaseCard(
-                title: 'Terlambat Hadir Apel Pagi',
-                description:
-                    'Pendampingan manajemen waktu pagi bersama Guru BK & Wali Kelas.',
-                dateTimeText: 'Kamis, 5 Nov 2026 • 07:20 WIB',
-                status: CaseStatus.inProgress,
-                onTap: () {
-                  setState(() {
-                    _selectedCase = _parentCases[0];
-                    _selectedNavIndex = 1;
-                  });
-                },
-              ),
-              const SizedBox(height: 10.0),
-              CaseCard(
-                title: 'Kelengkapan Atribut Seragam',
-                description:
-                    'Ananda telah melengkapi atribut seragam sesuai tata tertib sekolah.',
-                dateTimeText: 'Senin, 19 Okt 2026 • 07:15 WIB',
-                status: CaseStatus.completed,
-                onTap: () {
-                  setState(() {
-                    _selectedCase = _parentCases[1];
-                    _selectedNavIndex = 1;
-                  });
-                },
-              ),
+              ...List.generate(_cases.length, (i) {
+                final c = _cases[i];
+                return Padding(
+                  padding: EdgeInsets.only(bottom: i < _cases.length - 1 ? 10.0 : 0.0),
+                  child: CaseCard(
+                    title: c.caseTitle,
+                    description: c.chronology,
+                    dateTimeText: c.incidentTime,
+                    status: c.isCompleted
+                        ? CaseStatus.completed
+                        : CaseStatus.inProgress,
+                    onTap: () {
+                      setState(() {
+                        _selectedCase = c;
+                        _selectedNavIndex = 1;
+                      });
+                    },
+                  ),
+                );
+              }),
               const SizedBox(height: 16.0),
               // Section Konsultasi (SRS-F-010 & 011)
               Row(

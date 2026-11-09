@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/auth_service.dart';
 import '../../models/case_model.dart';
+import '../../repositories/analytics_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_bottom_nav.dart';
@@ -43,6 +45,29 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
   _GuruSubView? _previousSubView;
   CaseRecordModel? _selectedCaseForDetail;
   CaseRecordModel? _caseToEdit;
+  DashboardAnalyticsSummary? _summary;
+  String _activeCasesValue = '0';
+  String _sessionsCountValue = '0';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSummaryFromPocketBase();
+  }
+
+  Future<void> _loadSummaryFromPocketBase() async {
+    try {
+      final summary = await AnalyticsRepository.instance.getSummary();
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          _activeCasesValue = summary.activeCases.toString().padLeft(2, '0');
+          _sessionsCountValue =
+              summary.totalSessions.toString().padLeft(2, '0');
+        });
+      }
+    } catch (_) {}
+  }
 
   void _onNavTap(int index) {
     setState(() {
@@ -52,6 +77,9 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
       _selectedCaseForDetail = null;
       _caseToEdit = null;
     });
+    if (index == 0) {
+      _loadSummaryFromPocketBase();
+    }
   }
 
   void _openSubView(_GuruSubView subView) {
@@ -70,9 +98,12 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
         _caseToEdit = null;
       }
     });
+    _loadSummaryFromPocketBase();
   }
 
-  void _handleLogout() {
+  Future<void> _handleLogout() async {
+    await AuthService.instance.logout();
+    if (!mounted) return;
     if (widget.onLogout != null) {
       widget.onLogout!();
     } else {
@@ -218,9 +249,12 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
   Widget _buildHomeContent() {
     return SafeArea(
       bottom: false,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 20.0),
-        child: Column(
+      child: RefreshIndicator(
+        onRefresh: _loadSummaryFromPocketBase,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 20.0),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Top Bar (SRS-F-002)
@@ -241,20 +275,20 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                             onTap: () => setState(() => _selectedNavIndex = 3),
                           ),
                           const SizedBox(width: 12.0),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
+                                const Text(
                                   'E-BK SMPN 1 Pabuaran',
                                   style: AppTextStyles.captionSemibold11,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                SizedBox(height: 2.0),
+                                const SizedBox(height: 2.0),
                                 Text(
-                                  'Halo, Guru BK',
+                                  'Halo, ${AuthService.instance.currentUserName}',
                                   style: AppTextStyles.greetingGuru,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -340,7 +374,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                       children: [
                         Expanded(
                           child: _QuickSummarySubcard(
-                            value: '08',
+                            value: _activeCasesValue,
                             label: 'Kasus Diproses',
                             icon: Icons.folder_outlined,
                             onTap: () => _onNavTap(2),
@@ -349,7 +383,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                         const SizedBox(width: 12.0),
                         Expanded(
                           child: _QuickSummarySubcard(
-                            value: '05',
+                            value: _sessionsCountValue,
                             label: 'Jadwal Konseling\nHari Ini',
                             icon: Icons.calendar_today_outlined,
                             onTap: () => _onNavTap(1),
@@ -395,7 +429,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                     child: _MenuGridCard(
                       height: 132.0,
                       icon: Icons.people_outline_rounded,
-                      badgeText: '640 Siswa',
+                      badgeText: '${_summary?.totalStudents ?? 0} Siswa',
                       title: 'Data Siswa',
                       subtitle: 'Profil & kelas siswa',
                       onTap: () => _openSubView(_GuruSubView.dataSiswa),
@@ -406,7 +440,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                     child: _MenuGridCard(
                       height: 132.0,
                       icon: Icons.assignment_outlined,
-                      badgeText: '8 Proses',
+                      badgeText: '${_summary?.activeCases ?? 0} Proses',
                       title: 'Data Kasus',
                       subtitle: 'Catatan & pembinaan',
                       onTap: () => _onNavTap(2),
@@ -422,7 +456,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                     child: _MenuGridCard(
                       height: 132.0,
                       icon: Icons.chat_outlined,
-                      badgeText: '5 Jadwal',
+                      badgeText: '${_summary?.totalSessions ?? 0} Jadwal',
                       title: 'Layanan Konseling',
                       subtitle: 'Sesi & jadwal bimbingan',
                       onTap: () => _onNavTap(1),
@@ -433,7 +467,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                     child: _MenuGridCard(
                       height: 132.0,
                       icon: Icons.forum_outlined,
-                      badgeText: '3 Pesan',
+                      badgeText: '${_summary?.totalConsultations ?? 0} Pesan',
                       title: 'Konsul Orang Tua',
                       subtitle: 'Komunikasi wali murid',
                       onTap: () =>
@@ -535,8 +569,8 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                                   color: AppColors.canvasLightGray,
                                   borderRadius: BorderRadius.circular(99.0),
                                 ),
-                                child: const Text(
-                                  '640 Akun',
+                                child: Text(
+                                  '${_summary?.totalParents ?? 0} Akun',
                                   style: AppTextStyles.badgeSemibold10,
                                 ),
                               ),
@@ -557,7 +591,8 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
 

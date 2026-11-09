@@ -1,13 +1,29 @@
+import 'package:pocketbase/pocketbase.dart';
+import '../core/pb_client.dart';
+
 /// Model Data Kasus Pelanggaran Siswa (`SRS-F-004`, `SRS-F-008`, `SRS-F-009`)
 /// Menyimpan informasi jenis kasus (membolos, tawuran, dll), waktu kejadian,
 /// tempat kejadian, deskripsi kronologi, serta catatan penanganan oleh Guru BK.
 class CaseRecordModel {
+  /// Kode kasus yang ditampilkan di UI, mis: `#BK-2026-045`
   final String id;
+
+  /// ID record PocketBase (`cases.id`) untuk operasi update/delete.
+  final String recordId;
+
+  /// Relasi ID siswa di PocketBase (`students.id`).
+  final String studentId;
+
   final String studentName;
   final String studentNisn;
   final String studentClass;
   final String caseCategory;
   final String caseTitle;
+
+  /// Waktu & tanggal kejadian dalam bentuk DateTime (di backend PocketBase tersimpan di kolom `incident_time` berformat date/ISO-8601).
+  final DateTime? incidentDate;
+
+  /// Teks waktu kejadian terformat dalam Bahasa Indonesia, misal: `Sabtu, 07 Nov 2026 • 09:30 WIB`.
   final String incidentTime;
   final String incidentLocation;
   final String chronology;
@@ -19,11 +35,14 @@ class CaseRecordModel {
 
   const CaseRecordModel({
     required this.id,
+    this.recordId = '',
+    this.studentId = '',
     required this.studentName,
     required this.studentNisn,
     required this.studentClass,
     required this.caseCategory,
     required this.caseTitle,
+    this.incidentDate,
     required this.incidentTime,
     required this.incidentLocation,
     required this.chronology,
@@ -34,13 +53,23 @@ class CaseRecordModel {
     required this.violationPoints,
   });
 
+  /// Mengembalikan `DateTime` kejadian yang valid. Jika `incidentDate` kosong,
+  /// fungsi ini akan mem-parse `incidentTime` (string tanggal/jam Indonesia atau ISO).
+  DateTime get resolvedIncidentDate {
+    if (incidentDate != null) return incidentDate!;
+    return parseIncidentDateTime(incidentTime);
+  }
+
   CaseRecordModel copyWith({
     String? id,
+    String? recordId,
+    String? studentId,
     String? studentName,
     String? studentNisn,
     String? studentClass,
     String? caseCategory,
     String? caseTitle,
+    DateTime? incidentDate,
     String? incidentTime,
     String? incidentLocation,
     String? chronology,
@@ -52,11 +81,14 @@ class CaseRecordModel {
   }) {
     return CaseRecordModel(
       id: id ?? this.id,
+      recordId: recordId ?? this.recordId,
+      studentId: studentId ?? this.studentId,
       studentName: studentName ?? this.studentName,
       studentNisn: studentNisn ?? this.studentNisn,
       studentClass: studentClass ?? this.studentClass,
       caseCategory: caseCategory ?? this.caseCategory,
       caseTitle: caseTitle ?? this.caseTitle,
+      incidentDate: incidentDate ?? this.incidentDate,
       incidentTime: incidentTime ?? this.incidentTime,
       incidentLocation: incidentLocation ?? this.incidentLocation,
       chronology: chronology ?? this.chronology,
@@ -66,6 +98,154 @@ class CaseRecordModel {
       isCompleted: isCompleted ?? this.isCompleted,
       violationPoints: violationPoints ?? this.violationPoints,
     );
+  }
+
+  factory CaseRecordModel.fromRecord(RecordModel r) {
+    final expandedStudents = r.get<List<RecordModel>>('expand.student');
+    final studentRec =
+        expandedStudents.isNotEmpty ? expandedStudents.first : null;
+
+    final expandedCats = r.get<List<RecordModel>>('expand.category');
+    final catRec = expandedCats.isNotEmpty ? expandedCats.first : null;
+
+    final expandedCounselors = r.get<List<RecordModel>>('expand.counselor');
+    final counselorRec =
+        expandedCounselors.isNotEmpty ? expandedCounselors.first : null;
+
+    final codeStr = r.getStringValue('code').isNotEmpty
+        ? r.getStringValue('code')
+        : '#BK-${r.id.substring(0, r.id.length > 6 ? 6 : r.id.length).toUpperCase()}';
+
+    final rawDate = r.getStringValue('incident_time');
+    DateTime? incidentDate;
+    if (rawDate.isNotEmpty) {
+      incidentDate = DateTime.tryParse(rawDate)?.toLocal();
+    }
+
+    String incidentText = r.getStringValue('incident_time_text');
+    if (incidentText.isEmpty && incidentDate != null) {
+      incidentText = PbClient.formatDateTimeWib(incidentDate);
+    } else if (incidentText.isEmpty) {
+      incidentText = rawDate;
+    }
+
+    if (incidentDate == null && incidentText.isNotEmpty) {
+      incidentDate = parseIncidentDateTime(incidentText);
+    }
+
+    String handlingDateText = r.getStringValue('handling_date_text');
+    if (handlingDateText.isEmpty) {
+      final rawHandlingDate = r.getStringValue('handling_date');
+      final parsed = DateTime.tryParse(rawHandlingDate);
+      handlingDateText =
+          parsed != null ? PbClient.formatDateFull(parsed) : rawHandlingDate;
+    }
+
+    final catName = r.getStringValue('category_name').isNotEmpty
+        ? r.getStringValue('category_name')
+        : (catRec?.getStringValue('name') ?? 'Kedisiplinan');
+
+    final cName = r.getStringValue('counselor_name').isNotEmpty
+        ? r.getStringValue('counselor_name')
+        : (counselorRec?.getStringValue('name') ?? 'Pak Budi, S.Pd.');
+
+    return CaseRecordModel(
+      id: codeStr,
+      recordId: r.id,
+      studentId: r.getStringValue('student'),
+      studentName: studentRec?.getStringValue('name') ?? 'Siswa',
+      studentNisn: studentRec?.getStringValue('nisn') ?? '-',
+      studentClass: studentRec?.getStringValue('class_name') ?? '-',
+      caseCategory: catName,
+      caseTitle: r.getStringValue('title'),
+      incidentDate: incidentDate,
+      incidentTime: incidentText,
+      incidentLocation: r.getStringValue('location'),
+      chronology: r.getStringValue('chronology'),
+      handling: r.getStringValue('handling'),
+      handlingDate: handlingDateText,
+      counselorName: cName,
+      isCompleted: r.getBoolValue('is_completed'),
+      violationPoints: r.getIntValue('points'),
+    );
+  }
+
+  Map<String, dynamic> toJson({
+    required String resolvedStudentId,
+    String? categoryId,
+    String? counselorId,
+  }) {
+    final effectiveDate = incidentDate ?? resolvedIncidentDate;
+    return {
+      if (id.startsWith('#BK-') && !id.endsWith('BARU')) 'code': id,
+      'student': resolvedStudentId,
+      if (categoryId != null && categoryId.isNotEmpty) 'category': categoryId,
+      'category_name': caseCategory,
+      'title': caseTitle,
+      'incident_time': effectiveDate.toUtc().toIso8601String(),
+      'incident_time_text': incidentTime,
+      'location': incidentLocation,
+      'chronology': chronology,
+      'handling': handling,
+      'handling_date': DateTime.now().toUtc().toIso8601String(),
+      'handling_date_text': handlingDate,
+      if (counselorId != null && counselorId.isNotEmpty)
+        'counselor': counselorId,
+      'counselor_name': counselorName,
+      'is_completed': isCompleted,
+      'points': violationPoints,
+    };
+  }
+
+  /// Parser cerdas untuk membaca tanggal, bulan, tahun, serta jam kejadian
+  /// dari teks format Indonesia (mis: `Sabtu, 07 Nov 2026 • 09:30 WIB`) maupun string ISO-8601.
+  static DateTime parseIncidentDateTime(String? raw, [DateTime? fallback]) {
+    if (raw == null || raw.trim().isEmpty) {
+      return fallback ?? DateTime.now();
+    }
+    final trimmed = raw.trim();
+
+    final iso = DateTime.tryParse(trimmed);
+    if (iso != null) return iso.toLocal();
+
+    try {
+      final regex = RegExp(
+        r'(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})(?:\s*[•·-]\s*(\d{1,2})[:.](\d{2}))?',
+      );
+      final match = regex.firstMatch(trimmed);
+      if (match != null) {
+        final day = int.parse(match.group(1)!);
+        final monthStr = match.group(2)!.toLowerCase();
+        final year = int.parse(match.group(3)!);
+        final hour = match.group(4) != null ? int.parse(match.group(4)!) : 9;
+        final minute = match.group(5) != null ? int.parse(match.group(5)!) : 0;
+
+        const monthMap = {
+          'jan': 1, 'januari': 1, 'january': 1,
+          'feb': 2, 'februari': 2, 'february': 2,
+          'mar': 3, 'maret': 3, 'march': 3,
+          'apr': 4, 'april': 4,
+          'mei': 5, 'may': 5,
+          'jun': 6, 'juni': 6, 'june': 6,
+          'jul': 7, 'juli': 7, 'july': 7,
+          'agu': 8, 'agustus': 8, 'agt': 8, 'aug': 8, 'august': 8,
+          'sep': 9, 'september': 9,
+          'okt': 10, 'oktober': 10, 'oct': 10, 'october': 10,
+          'nov': 11, 'november': 11,
+          'des': 12, 'desember': 12, 'dec': 12, 'december': 12,
+        };
+        int month = 1;
+        for (final entry in monthMap.entries) {
+          if (monthStr.startsWith(entry.key)) {
+            month = entry.value;
+            break;
+          }
+        }
+        return DateTime(year, month, day, hour, minute);
+      }
+    } catch (_) {}
+
+    return fallback ?? DateTime.now();
   }
 
   /// Data awal kasus pelanggaran siswa SMPN 1 Pabuaran

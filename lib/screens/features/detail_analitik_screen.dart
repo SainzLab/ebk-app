@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/analytics_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -47,7 +48,7 @@ class DetailAnalitikScreen extends StatefulWidget {
 class _DetailAnalitikScreenState extends State<DetailAnalitikScreen> {
   int _selectedTabIndex = 0;
 
-  static const List<_StudentRankItem> _topStudents = [
+  static const List<_StudentRankItem> _defaultTopStudents = [
     _StudentRankItem(
       rank: '#1',
       name: 'Bagas Pratama',
@@ -104,6 +105,61 @@ class _DetailAnalitikScreenState extends State<DetailAnalitikScreen> {
       pillTextColor: AppColors.primaryNavy,
     ),
   ];
+
+  List<_StudentRankItem> _topStudents = List.from(_defaultTopStudents);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTopStudentsFromPocketBase();
+  }
+
+  Future<void> _loadTopStudentsFromPocketBase() async {
+    try {
+      final summary = await AnalyticsRepository.instance.getSummary();
+      if (mounted && summary.topStudents.isNotEmpty) {
+        setState(() {
+          _topStudents = List.generate(summary.topStudents.length, (i) {
+            final item = summary.topStudents[i];
+            final isFirst = i == 0;
+            final isTopThree = i < 3;
+            return _StudentRankItem(
+              rank: '#${i + 1}',
+              name: item.studentName,
+              subtitle:
+                  '${item.studentClass} • Total ${item.totalPoints} Poin',
+              caseCountText: '${item.caseCount} Kasus',
+              rankBgColor: isFirst
+                  ? AppColors.errorSurface
+                  : (isTopThree
+                      ? AppColors.warningSurface
+                      : AppColors.dividerSubtle),
+              rankBorderColor: isFirst
+                  ? AppColors.errorBadgeBg
+                  : (isTopThree
+                      ? AppColors.warningBorder
+                      : AppColors.borderNeutral),
+              rankTextColor: isFirst
+                  ? AppColors.errorPrimary
+                  : (isTopThree
+                      ? AppColors.warningIcon
+                      : AppColors.textSecondary),
+              pillBgColor: isFirst
+                  ? AppColors.errorSurface
+                  : (isTopThree
+                      ? AppColors.warningSurface
+                      : AppColors.primaryTint),
+              pillTextColor: isFirst
+                  ? AppColors.errorPrimary
+                  : (isTopThree
+                      ? AppColors.warningIcon
+                      : AppColors.primaryNavy),
+            );
+          });
+        });
+      }
+    } catch (_) {}
+  }
 
   void _handleDownloadPdf() {
     ToastNotification.show(

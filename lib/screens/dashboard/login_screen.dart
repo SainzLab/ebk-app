@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/app_exception.dart';
+import '../../core/auth_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
+import '../../widgets/toast_notification.dart';
 
 /// Halaman Login (`02 • Layar Login (SRS-F-001)`)
 /// berdasarkan `02-layar-login-srs-f-001.png` dan `ebk_design.json`.
@@ -25,6 +28,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _identifierController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -33,18 +37,44 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
+    if (_isSubmitting) return;
     if (widget.onLoginSuccess != null) {
       widget.onLoginSuccess!();
       return;
     }
-    final input = _identifierController.text.trim().toLowerCase();
-    if (input.contains('ortu') || input.contains('wali') || input.contains('siti')) {
-      Navigator.pushReplacementNamed(context, '/dashboard-ortu');
-    } else if (input.contains('kepsek') || input.contains('kepala')) {
-      Navigator.pushReplacementNamed(context, '/dashboard-kepsek');
-    } else {
-      Navigator.pushReplacementNamed(context, '/dashboard-guru');
+
+    final identifier = _identifierController.text.trim();
+    final password = _passwordController.text;
+
+    if (identifier.isEmpty || password.isEmpty) {
+      ToastNotification.show(
+        context,
+        message: 'Harap masukkan Email/Username dan Kata Sandi.',
+        type: ToastType.error,
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final role = await AuthService.instance.login(
+        identifier: identifier,
+        password: password,
+      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AuthService.routeForRole(role));
+    } on AppException catch (e) {
+      if (!mounted) return;
+      ToastNotification.show(
+        context,
+        message: e.message,
+        type: ToastType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -221,8 +251,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 20.0),
                               // Tombol Utama Login
                               CustomButton.primary(
-                                label: 'Login',
-                                onPressed: _handleLogin,
+                                label: _isSubmitting ? 'Memproses...' : 'Login',
+                                onPressed: _isSubmitting ? null : _handleLogin,
                               ),
                             ],
                           ),

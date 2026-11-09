@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/parent_consultation_model.dart';
+import '../../repositories/parent_consultation_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -67,11 +68,23 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
   void initState() {
     super.initState();
     _consultations = ParentConsultationModel.getInitialConsultations();
+    _loadConsultationsFromPocketBase();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  Future<void> _loadConsultationsFromPocketBase() async {
+    try {
+      final list = await ParentConsultationRepository.instance.getConsultations();
+      if (mounted) {
+        setState(() {
+          _consultations = list;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -181,23 +194,31 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
   }
 
   // Toggle Cepat Status Konsultasi
-  void _toggleStatus(ParentConsultationModel item) {
-    setState(() {
-      final index = _consultations.indexWhere((c) => c.id == item.id);
-      if (index != -1) {
-        final newStatus = !_consultations[index].isCompleted;
-        _consultations[index] =
-            _consultations[index].copyWith(isCompleted: newStatus);
+  Future<void> _toggleStatus(ParentConsultationModel item) async {
+    final index = _consultations.indexWhere((c) => c.id == item.id);
+    if (index == -1) return;
 
-        ToastNotification.show(
-          context,
-          message: newStatus
-              ? 'Konsultasi ${item.id} (${item.parentName}) diselesaikan.'
-              : 'Status konsultasi ${item.id} dibuka kembali (Dalam Proses).',
-          type: ToastType.success,
-        );
-      }
+    final newStatus = !_consultations[index].isCompleted;
+    final updatedItem = _consultations[index].copyWith(isCompleted: newStatus);
+    setState(() {
+      _consultations[index] = updatedItem;
     });
+
+    try {
+      if (!item.id.startsWith('KOP-')) {
+        await ParentConsultationRepository.instance
+            .updateConsultation(updatedItem);
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    ToastNotification.show(
+      context,
+      message: newStatus
+          ? 'Konsultasi ${item.id} (${item.parentName}) diselesaikan.'
+          : 'Status konsultasi ${item.id} dibuka kembali (Dalam Proses).',
+      type: ToastType.success,
+    );
   }
 
   // Modal Bottom Sheet: Filter & Urutkan
@@ -715,7 +736,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                     CustomButton(
                       label: isEdit ? 'Simpan Perubahan' : 'Simpan Catatan',
                       height: 50.0,
-                      onPressed: () {
+                      onPressed: () async {
                         if (waliCtrl.text.trim().isEmpty ||
                             topicCtrl.text.trim().isEmpty) {
                           ToastNotification.show(
@@ -727,29 +748,11 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                           return;
                         }
 
-                        setState(() {
-                          if (isEdit) {
-                            final idx = _consultations
-                                .indexWhere((c) => c.id == editItem.id);
-                            if (idx != -1) {
-                              _consultations[idx] =
-                                  _consultations[idx].copyWith(
-                                parentName: waliCtrl.text.trim(),
-                                studentName: selectedStudent['name']!,
-                                studentClass: selectedStudent['class']!,
-                                studentNisn: selectedStudent['nisn']!,
-                                dateTimeText: dateCtrl.text.trim(),
-                                consultationMethod: selectedMethod,
-                                topic: topicCtrl.text.trim(),
-                                discussionSummary: summaryCtrl.text.trim(),
-                                followUpPlan: followUpCtrl.text.trim(),
-                                isCompleted: isCompleted,
-                              );
-                            }
-                          } else {
-                            final newId = 'KOP-0${_consultations.length + 1}';
-                            final newItem = ParentConsultationModel(
-                              id: newId,
+                        if (isEdit) {
+                          final idx = _consultations
+                              .indexWhere((c) => c.id == editItem.id);
+                          if (idx != -1) {
+                            var updatedItem = _consultations[idx].copyWith(
                               parentName: waliCtrl.text.trim(),
                               studentName: selectedStudent['name']!,
                               studentClass: selectedStudent['class']!,
@@ -761,11 +764,47 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                               followUpPlan: followUpCtrl.text.trim(),
                               isCompleted: isCompleted,
                             );
-                            _consultations.insert(0, newItem);
+                            try {
+                              if (!editItem.id.startsWith('KOP-')) {
+                                updatedItem = await ParentConsultationRepository
+                                    .instance
+                                    .updateConsultation(updatedItem);
+                              }
+                            } catch (_) {}
+                            if (mounted) {
+                              setState(() {
+                                _consultations[idx] = updatedItem;
+                              });
+                            }
                           }
-                        });
+                        } else {
+                          final newId = 'KOP-0${_consultations.length + 1}';
+                          var newItem = ParentConsultationModel(
+                            id: newId,
+                            parentName: waliCtrl.text.trim(),
+                            studentName: selectedStudent['name']!,
+                            studentClass: selectedStudent['class']!,
+                            studentNisn: selectedStudent['nisn']!,
+                            dateTimeText: dateCtrl.text.trim(),
+                            consultationMethod: selectedMethod,
+                            topic: topicCtrl.text.trim(),
+                            discussionSummary: summaryCtrl.text.trim(),
+                            followUpPlan: followUpCtrl.text.trim(),
+                            isCompleted: isCompleted,
+                          );
+                          try {
+                            newItem = await ParentConsultationRepository.instance
+                                .createConsultation(newItem);
+                          } catch (_) {}
+                          if (mounted) {
+                            setState(() {
+                              _consultations.insert(0, newItem);
+                            });
+                          }
+                        }
 
-                        Navigator.pop(ctx);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
                         ToastNotification.show(
                           context,
                           message: isEdit

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/case_model.dart';
+import '../../repositories/case_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -78,6 +79,18 @@ class _KelolaKasusScreenState extends State<KelolaKasusScreen> {
   void initState() {
     super.initState();
     _cases = List.from(CaseRecordModel.defaultCases);
+    _loadCasesFromPocketBase();
+  }
+
+  Future<void> _loadCasesFromPocketBase() async {
+    try {
+      final list = await CaseRepository.instance.getCases();
+      if (mounted) {
+        setState(() {
+          _cases = list;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -665,6 +678,10 @@ class _KelolaKasusScreenState extends State<KelolaKasusScreen> {
     );
 
     if (confirmed == true && mounted) {
+      try {
+        await CaseRepository.instance.deleteCase(caseItem);
+      } catch (_) {}
+      if (!mounted) return;
       setState(() {
         _cases.removeWhere((c) => c.id == caseItem.id);
       });
@@ -1020,52 +1037,61 @@ class _KelolaKasusScreenState extends State<KelolaKasusScreen> {
 
                   // List Kartu Kasus Pelanggaran
                   Expanded(
-                    child: filteredList.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.assignment_turned_in_outlined,
-                                  size: 42.0,
-                                  color: AppColors.textPlaceholder,
-                                ),
-                                const SizedBox(height: 8.0),
-                                const Text(
-                                  'Tidak ada catatan kasus yang sesuai filter.',
-                                  style: AppTextStyles.body,
-                                ),
-                                if (_hasActiveFilters) ...[
-                                  const SizedBox(height: 8.0),
-                                  GestureDetector(
-                                    onTap: _resetFilters,
-                                    child: Text(
-                                      'Reset Filter Kasus',
-                                      style: AppTextStyles.badgeBold10.copyWith(
-                                        color: AppColors.primaryNavy,
-                                        fontSize: 12.0,
-                                      ),
+                    child: RefreshIndicator(
+                      onRefresh: _loadCasesFromPocketBase,
+                      child: filteredList.isEmpty
+                          ? SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: 320.0,
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.assignment_turned_in_outlined,
+                                      size: 42.0,
+                                      color: AppColors.textPlaceholder,
                                     ),
-                                  ),
-                                ],
-                              ],
+                                    const SizedBox(height: 8.0),
+                                    const Text(
+                                      'Tidak ada catatan kasus yang sesuai filter.',
+                                      style: AppTextStyles.body,
+                                    ),
+                                    if (_hasActiveFilters) ...[
+                                      const SizedBox(height: 8.0),
+                                      GestureDetector(
+                                        onTap: _resetFilters,
+                                        child: Text(
+                                          'Reset Filter Kasus',
+                                          style: AppTextStyles.badgeBold10.copyWith(
+                                            color: AppColors.primaryNavy,
+                                            fontSize: 12.0,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.only(bottom: 80.0),
+                              itemCount: filteredList.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 12.0),
+                              itemBuilder: (context, index) {
+                                final item = filteredList[index];
+                                return _CaseItemCard(
+                                  caseItem: item,
+                                  onTapDetail: () => _openDetailKasus(item),
+                                  onEdit: () => _openEditKasus(item),
+                                  onDelete: () => _deleteCase(item),
+                                );
+                              },
                             ),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.only(bottom: 80.0),
-                            itemCount: filteredList.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12.0),
-                            itemBuilder: (context, index) {
-                              final item = filteredList[index];
-                              return _CaseItemCard(
-                                caseItem: item,
-                                onTapDetail: () => _openDetailKasus(item),
-                                onEdit: () => _openEditKasus(item),
-                                onDelete: () => _deleteCase(item),
-                              );
-                            },
-                          ),
+                    ),
                   ),
 
                   // Home Indicator

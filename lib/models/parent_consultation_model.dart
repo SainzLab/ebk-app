@@ -1,7 +1,12 @@
+import 'package:pocketbase/pocketbase.dart';
+import '../core/pb_client.dart';
+
 /// Model Catatan & Riwayat Konsultasi Orang Tua (`09 • Konsultasi Orang Tua (SRS-F-006)`)
 /// Menyimpan informasi orang tua/wali, siswa, waktu, metode komunikasi, topik, hasil diskusi, dan tindak lanjut.
 class ParentConsultationModel {
   final String id;
+  final String parentId;
+  final String studentId;
   final String parentName;
   final String studentName;
   final String studentClass;
@@ -15,6 +20,8 @@ class ParentConsultationModel {
 
   const ParentConsultationModel({
     required this.id,
+    this.parentId = '',
+    this.studentId = '',
     required this.parentName,
     required this.studentName,
     required this.studentClass,
@@ -29,6 +36,8 @@ class ParentConsultationModel {
 
   ParentConsultationModel copyWith({
     String? id,
+    String? parentId,
+    String? studentId,
     String? parentName,
     String? studentName,
     String? studentClass,
@@ -42,6 +51,8 @@ class ParentConsultationModel {
   }) {
     return ParentConsultationModel(
       id: id ?? this.id,
+      parentId: parentId ?? this.parentId,
+      studentId: studentId ?? this.studentId,
       parentName: parentName ?? this.parentName,
       studentName: studentName ?? this.studentName,
       studentClass: studentClass ?? this.studentClass,
@@ -55,6 +66,69 @@ class ParentConsultationModel {
     );
   }
 
+  factory ParentConsultationModel.fromRecord(RecordModel r) {
+    final expandedStudents = r.get<List<RecordModel>>('expand.student');
+    final studentRec =
+        expandedStudents.isNotEmpty ? expandedStudents.first : null;
+
+    final expandedParents = r.get<List<RecordModel>>('expand.parent');
+    final parentRec =
+        expandedParents.isNotEmpty ? expandedParents.first : null;
+
+    final pName = r.getStringValue('parent_name').isNotEmpty
+        ? r.getStringValue('parent_name')
+        : (parentRec?.getStringValue('name') ??
+            studentRec?.getStringValue('guardian_name') ??
+            'Orang Tua Siswa');
+
+    String dtText = r.getStringValue('date_time_text');
+    if (dtText.isEmpty) {
+      final rawHeld = r.getStringValue('held_at');
+      final parsed = DateTime.tryParse(rawHeld);
+      dtText = parsed != null ? PbClient.formatDateTimeWib(parsed) : rawHeld;
+    }
+
+    return ParentConsultationModel(
+      id: r.id,
+      parentId: r.getStringValue('parent'),
+      studentId: r.getStringValue('student'),
+      parentName: pName,
+      studentName: studentRec?.getStringValue('name') ?? 'Siswa',
+      studentClass: studentRec?.getStringValue('class_name') ?? '-',
+      studentNisn: studentRec?.getStringValue('nisn') ?? '-',
+      dateTimeText: dtText,
+      consultationMethod: r.getStringValue('consultation_method').isNotEmpty
+          ? r.getStringValue('consultation_method')
+          : 'Tatap Muka di Ruang BK',
+      topic: r.getStringValue('topic'),
+      discussionSummary: r.getStringValue('discussion_summary'),
+      followUpPlan: r.getStringValue('follow_up_plan'),
+      isCompleted: r.getBoolValue('is_completed'),
+    );
+  }
+
+  Map<String, dynamic> toJson({
+    required String resolvedStudentId,
+    String? resolvedParentId,
+    String? counselorId,
+  }) {
+    return {
+      if (resolvedParentId != null && resolvedParentId.isNotEmpty)
+        'parent': resolvedParentId,
+      'parent_name': parentName,
+      'student': resolvedStudentId,
+      if (counselorId != null && counselorId.isNotEmpty)
+        'counselor': counselorId,
+      'held_at': DateTime.now().toUtc().toIso8601String(),
+      'date_time_text': dateTimeText,
+      'consultation_method': consultationMethod,
+      'topic': topic,
+      'discussion_summary': discussionSummary,
+      'follow_up_plan': followUpPlan,
+      'is_completed': isCompleted,
+    };
+  }
+
   String get statusLabel => isCompleted ? 'Selesai' : 'Dalam Proses';
 
   static List<ParentConsultationModel> getInitialConsultations() {
@@ -64,7 +138,7 @@ class ParentConsultationModel {
         parentName: 'Bapak Hendra Pratama',
         studentName: 'Rizky Pratama',
         studentClass: 'Kelas IX-B',
-        studentNisn: '0081234567',
+        studentNisn: '0094821034',
         dateTimeText: 'Selasa, 10 Nov 2026 • 10:00 WIB',
         consultationMethod: 'Tatap Muka di Ruang BK',
         topic: 'Evaluasi Kedisiplinan Jam Bangun Pagi & Istirahat di Rumah',
@@ -76,10 +150,10 @@ class ParentConsultationModel {
       ),
       const ParentConsultationModel(
         id: 'KOP-02',
-        parentName: 'Ibu Ratna Dewi',
+        parentName: 'Ibu Dewi Maharani',
         studentName: 'Alya Putri Maharani',
         studentClass: 'Kelas VIII-A',
-        studentNisn: '0098765432',
+        studentNisn: '0103948219',
         dateTimeText: 'Senin, 09 Nov 2026 • 13:30 WIB',
         consultationMethod: 'Panggilan Telepon / WA',
         topic: 'Dukungan Persiapan Asesmen Akademik & Minat Belajar',
@@ -91,10 +165,10 @@ class ParentConsultationModel {
       ),
       const ParentConsultationModel(
         id: 'KOP-03',
-        parentName: 'Bapak Suryadi',
+        parentName: 'Bapak Agus Saputra',
         studentName: 'Dimas Aditya Saputra',
         studentClass: 'Kelas VII-C',
-        studentNisn: '0105678912',
+        studentNisn: '0112839401',
         dateTimeText: 'Kamis, 05 Nov 2026 • 11:00 WIB',
         consultationMethod: 'Tatap Muka di Ruang BK',
         topic: 'Adaptasi Perilaku dan Pergaulan Lingkungan Sekolah Baru',
@@ -106,10 +180,10 @@ class ParentConsultationModel {
       ),
       const ParentConsultationModel(
         id: 'KOP-04',
-        parentName: 'Ibu Sri Wahyuni',
-        studentName: 'Farhan Maulana',
+        parentName: 'Ibu Rina Kusumawati',
+        studentName: 'Nabila Zahra Aulia',
         studentClass: 'Kelas IX-A',
-        studentNisn: '0087654321',
+        studentNisn: '0098374612',
         dateTimeText: 'Rabu, 04 Nov 2026 • 14:00 WIB',
         consultationMethod: 'Home Visit / Kunjungan',
         topic: 'Kunjungan Rumah Terkait Presensi & Peminatan Sekolah Lanjutan',
@@ -121,10 +195,10 @@ class ParentConsultationModel {
       ),
       const ParentConsultationModel(
         id: 'KOP-05',
-        parentName: 'Bapak Agus Santoso',
-        studentName: 'Budi Santoso',
+        parentName: 'Ibu Siti Nurjanah',
+        studentName: 'Salsabila Khairunnisa',
         studentClass: 'Kelas VII-A',
-        studentNisn: '0103456789',
+        studentNisn: '0115920384',
         dateTimeText: 'Jumat, 13 Nov 2026 • 09:00 WIB',
         consultationMethod: 'Panggilan Telepon / WA',
         topic: 'Konfirmasi Keterlambatan Masuk Sekolah Hari Senin',

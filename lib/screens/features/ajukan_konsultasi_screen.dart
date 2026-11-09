@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../repositories/consultation_request_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -39,7 +40,19 @@ class _AjukanKonsultasiScreenState extends State<AjukanKonsultasiScreen> {
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
+    final msg = _pesanController.text.trim().isEmpty
+        ? 'Pengajuan jadwal konsultasi oleh orang tua siswa.'
+        : _pesanController.text.trim();
+    try {
+      await ConsultationRequestRepository.instance.submitRequest(
+        topicCategory: _selectedTopicChip,
+        topic: _selectedDropdownTopic,
+        message: msg,
+      );
+      _pesanController.clear();
+    } catch (_) {}
+    if (!mounted) return;
     ToastNotification.show(
       context,
       message: 'Berhasil: Pengajuan jadwal konsultasi telah dikirim.',

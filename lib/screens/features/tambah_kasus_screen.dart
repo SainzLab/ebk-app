@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../../core/pb_client.dart';
 import '../../models/case_model.dart';
+import '../../repositories/case_repository.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -29,6 +33,9 @@ class TambahKasusScreen extends StatefulWidget {
 
 class _TambahKasusScreenState extends State<TambahKasusScreen> {
   late final TextEditingController _siswaController;
+  late DateTime _selectedIncidentDateTime;
+  late final TextEditingController _tanggalController;
+  late final TextEditingController _jamController;
   late final TextEditingController _waktuController;
   late final TextEditingController _tempatController;
   late final TextEditingController _kronologiController;
@@ -117,10 +124,12 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
   late String _selectedStudentName;
   late String _selectedStudentClass;
   late String _selectedStudentNisn;
+  List<Map<String, String>> _studentOptions = List.from(_predefinedStudents);
 
   @override
   void initState() {
     super.initState();
+    _loadStudentsForPicker();
     final init = widget.initialCase;
 
     if (init != null) {
@@ -132,10 +141,21 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
       _isCompleted = init.isCompleted;
       _violationPoints = init.violationPoints;
 
+      _selectedIncidentDateTime = init.incidentDate ??
+          CaseRecordModel.parseIncidentDateTime(init.incidentTime);
+
       _siswaController = TextEditingController(
         text: '$_selectedStudentName • $_selectedStudentClass ($_selectedStudentNisn)',
       );
-      _waktuController = TextEditingController(text: init.incidentTime);
+      _tanggalController = TextEditingController(
+        text: DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(_selectedIncidentDateTime),
+      );
+      _jamController = TextEditingController(
+        text: '${DateFormat('HH:mm').format(_selectedIncidentDateTime)} WIB',
+      );
+      _waktuController = TextEditingController(
+        text: PbClient.formatDateTimeWib(_selectedIncidentDateTime),
+      );
       _tempatController = TextEditingController(text: init.incidentLocation);
       _kronologiController = TextEditingController(text: init.chronology);
       _penangananController = TextEditingController(text: init.handling);
@@ -152,11 +172,19 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
       _violationPoints = defaultType['points'] as int;
       _isCompleted = false;
 
+      _selectedIncidentDateTime = DateTime.now();
+
       _siswaController = TextEditingController(
         text: '$_selectedStudentName • $_selectedStudentClass ($_selectedStudentNisn)',
       );
+      _tanggalController = TextEditingController(
+        text: DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(_selectedIncidentDateTime),
+      );
+      _jamController = TextEditingController(
+        text: '${DateFormat('HH:mm').format(_selectedIncidentDateTime)} WIB',
+      );
       _waktuController = TextEditingController(
-        text: 'Sabtu, 07 Nov 2026 • 09:30 WIB',
+        text: PbClient.formatDateTimeWib(_selectedIncidentDateTime),
       );
       _tempatController = TextEditingController(
         text: defaultType['defaultLocation'] as String,
@@ -167,9 +195,133 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
     }
   }
 
+  void _updateDateTimeControllers() {
+    _tanggalController.text =
+        DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(_selectedIncidentDateTime);
+    _jamController.text =
+        '${DateFormat('HH:mm').format(_selectedIncidentDateTime)} WIB';
+    _waktuController.text =
+        PbClient.formatDateTimeWib(_selectedIncidentDateTime);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedIncidentDateTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      helpText: 'Pilih Tanggal & Tahun Kejadian',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryNavy,
+              onPrimary: AppColors.pureWhite,
+              surface: AppColors.pureWhite,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.pureWhite,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedIncidentDateTime = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _selectedIncidentDateTime.hour,
+          _selectedIncidentDateTime.minute,
+        );
+        _updateDateTimeControllers();
+      });
+    }
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: _selectedIncidentDateTime.hour,
+        minute: _selectedIncidentDateTime.minute,
+      ),
+      helpText: 'Pilih Waktu / Jam Kejadian',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryNavy,
+              onPrimary: AppColors.pureWhite,
+              surface: AppColors.pureWhite,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.pureWhite,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedIncidentDateTime = DateTime(
+          _selectedIncidentDateTime.year,
+          _selectedIncidentDateTime.month,
+          _selectedIncidentDateTime.day,
+          picked.hour,
+          picked.minute,
+        );
+        _updateDateTimeControllers();
+      });
+    }
+  }
+
+  Future<void> _loadStudentsForPicker() async {
+    try {
+      final list = await StudentRepository.instance.getStudents();
+      if (mounted && list.isNotEmpty) {
+        setState(() {
+          _studentOptions = list
+              .map(
+                (s) => {
+                  'id': s.id,
+                  'name': s.name,
+                  'class': s.className,
+                  'nisn': s.nisn,
+                },
+              )
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     _siswaController.dispose();
+    _tanggalController.dispose();
+    _jamController.dispose();
     _waktuController.dispose();
     _tempatController.dispose();
     _kronologiController.dispose();
@@ -181,77 +333,91 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
   void _showStudentPicker() {
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: AppColors.modalBackdrop,
       builder: (ctx) {
         return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
           padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 24.0),
           decoration: const BoxDecoration(
             color: AppColors.pureWhite,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44.0,
-                  height: 4.0,
-                  decoration: BoxDecoration(
-                    color: AppColors.borderMuted,
-                    borderRadius: BorderRadius.circular(99.0),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44.0,
+                    height: 4.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderMuted,
+                      borderRadius: BorderRadius.circular(99.0),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14.0),
-              const Text('Pilih Siswa', style: AppTextStyles.topBarTitle),
-              const SizedBox(height: 10.0),
-              ...List.generate(_predefinedStudents.length, (i) {
-                final s = _predefinedStudents[i];
-                final isSelected = s['name'] == _selectedStudentName;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 36.0,
-                    height: 36.0,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryTint,
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.person_outline_rounded,
-                      size: 18.0,
-                      color: AppColors.primaryNavy,
-                    ),
+                const SizedBox(height: 14.0),
+                const Text('Pilih Siswa', style: AppTextStyles.topBarTitle),
+                const SizedBox(height: 10.0),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _studentOptions.length,
+                    itemBuilder: (context, i) {
+                      final s = _studentOptions[i];
+                      final isSelected = s['name'] == _selectedStudentName;
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Container(
+                          width: 36.0,
+                          height: 36.0,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTint,
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.person_outline_rounded,
+                            size: 18.0,
+                            color: AppColors.primaryNavy,
+                          ),
+                        ),
+                        title: Text(
+                          s['name']!,
+                          style: AppTextStyles.cardTitle.copyWith(
+                            color: isSelected ? AppColors.primaryNavy : AppColors.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${s['class']} • NISN: ${s['nisn']}',
+                          style: AppTextStyles.subtitle11,
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryNavy)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _selectedStudentName = s['name']!;
+                            _selectedStudentClass = s['class']!;
+                            _selectedStudentNisn = s['nisn']!;
+                            _siswaController.text =
+                                '$_selectedStudentName • $_selectedStudentClass ($_selectedStudentNisn)';
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
                   ),
-                  title: Text(
-                    s['name']!,
-                    style: AppTextStyles.cardTitle.copyWith(
-                      color: isSelected ? AppColors.primaryNavy : AppColors.textPrimary,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${s['class']} • NISN: ${s['nisn']}',
-                    style: AppTextStyles.subtitle11,
-                  ),
-                  trailing: isSelected
-                      ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryNavy)
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedStudentName = s['name']!;
-                      _selectedStudentClass = s['class']!;
-                      _selectedStudentNisn = s['nisn']!;
-                      _siswaController.text =
-                          '$_selectedStudentName • $_selectedStudentClass ($_selectedStudentNisn)';
-                    });
-                    Navigator.pop(ctx);
-                  },
-                );
-              }),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -274,90 +440,94 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
             color: AppColors.pureWhite,
             borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44.0,
-                  height: 4.0,
-                  decoration: BoxDecoration(
-                    color: AppColors.borderMuted,
-                    borderRadius: BorderRadius.circular(99.0),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 44.0,
+                    height: 4.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderMuted,
+                      borderRadius: BorderRadius.circular(99.0),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14.0),
-              const Text('Pilih Jenis Kasus Pelanggaran', style: AppTextStyles.topBarTitle),
-              const SizedBox(height: 10.0),
-              Flexible(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _caseTypes.length,
-                  separatorBuilder: (_, __) => const Divider(color: AppColors.borderNeutral),
-                  itemBuilder: (context, i) {
-                    final item = _caseTypes[i];
-                    final String title = item['title'] as String;
-                    final String cat = item['category'] as String;
-                    final int points = item['points'] as int;
-                    final String defLoc = item['defaultLocation'] as String;
-                    final isSelected = title == _selectedCaseType;
+                const SizedBox(height: 14.0),
+                const Text('Pilih Jenis Kasus Pelanggaran', style: AppTextStyles.topBarTitle),
+                const SizedBox(height: 10.0),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.zero,
+                    itemCount: _caseTypes.length,
+                    separatorBuilder: (_, __) => const Divider(color: AppColors.borderNeutral),
+                    itemBuilder: (context, i) {
+                      final item = _caseTypes[i];
+                      final String title = item['title'] as String;
+                      final String cat = item['category'] as String;
+                      final int points = item['points'] as int;
+                      final String defLoc = item['defaultLocation'] as String;
+                      final isSelected = title == _selectedCaseType;
 
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        title,
-                        style: AppTextStyles.cardTitle.copyWith(
-                          color: isSelected ? AppColors.primaryNavy : AppColors.textPrimary,
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          title,
+                          style: AppTextStyles.cardTitle.copyWith(
+                            color: isSelected ? AppColors.primaryNavy : AppColors.textPrimary,
+                          ),
                         ),
-                      ),
-                      subtitle: Row(
-                        children: [
-                          Text(cat, style: AppTextStyles.subtitle11),
-                          const SizedBox(width: 8.0),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
-                            decoration: BoxDecoration(
-                              color: AppColors.errorSurface,
-                              borderRadius: BorderRadius.circular(4.0),
-                            ),
-                            child: Text(
-                              '+$points Poin',
-                              style: AppTextStyles.badgeBold10.copyWith(
-                                color: AppColors.errorPrimary,
-                                fontSize: 9.0,
+                        subtitle: Row(
+                          children: [
+                            Text(cat, style: AppTextStyles.subtitle11),
+                            const SizedBox(width: 8.0),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                              decoration: BoxDecoration(
+                                color: AppColors.errorSurface,
+                                borderRadius: BorderRadius.circular(4.0),
+                              ),
+                              child: Text(
+                                '+$points Poin',
+                                style: AppTextStyles.badgeBold10.copyWith(
+                                  color: AppColors.errorPrimary,
+                                  fontSize: 9.0,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      trailing: isSelected
-                          ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryNavy)
-                          : null,
-                      onTap: () {
-                        setState(() {
-                          _selectedCaseType = title;
-                          _selectedCategory = cat;
-                          _violationPoints = points;
-                          if (_tempatController.text.isEmpty) {
-                            _tempatController.text = defLoc;
-                          }
-                        });
-                        Navigator.pop(ctx);
-                      },
-                    );
-                  },
+                          ],
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryNavy)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _selectedCaseType = title;
+                            _selectedCategory = cat;
+                            _violationPoints = points;
+                            if (_tempatController.text.isEmpty) {
+                              _tempatController.text = defLoc;
+                            }
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  void _handleSave() {
+  Future<void> _handleSave() async {
     final waktu = _waktuController.text.trim();
     final tempat = _tempatController.text.trim();
     final kronologi = _kronologiController.text.trim();
@@ -372,16 +542,23 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
       return;
     }
 
-    final id = widget.initialCase?.id ?? '#BK-2026-0${50 + DateTime.now().second % 40}';
+    final id = widget.initialCase?.id ??
+        '#BK-${DateTime.now().year}-0${50 + DateTime.now().second % 40}';
 
-    final savedCase = CaseRecordModel(
+    final incidentTimeFormatted =
+        PbClient.formatDateTimeWib(_selectedIncidentDateTime);
+
+    CaseRecordModel savedCase = CaseRecordModel(
       id: id,
+      recordId: widget.initialCase?.recordId ?? '',
+      studentId: widget.initialCase?.studentId ?? '',
       studentName: _selectedStudentName,
       studentNisn: _selectedStudentNisn,
       studentClass: _selectedStudentClass,
       caseCategory: _selectedCategory,
       caseTitle: _selectedCaseType,
-      incidentTime: waktu.isEmpty ? 'Hari ini • Jam Pelajaran' : waktu,
+      incidentDate: _selectedIncidentDateTime,
+      incidentTime: incidentTimeFormatted,
       incidentLocation: tempat,
       chronology: kronologi,
       handling: penanganan,
@@ -393,6 +570,15 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
       violationPoints: _violationPoints,
     );
 
+    try {
+      if (_isEditing) {
+        savedCase = await CaseRepository.instance.updateCase(savedCase);
+      } else {
+        savedCase = await CaseRepository.instance.createCase(savedCase);
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
     if (widget.onSaveSuccess != null) {
       widget.onSaveSuccess!(savedCase);
     } else {
@@ -452,9 +638,16 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
                         ),
                       ),
                     ),
-                    Text(
-                      _isEditing ? 'Edit Data Kasus' : 'Catat Kasus Baru',
-                      style: AppTextStyles.topBarTitle,
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          _isEditing ? 'Edit Data Kasus' : 'Catat Kasus Baru',
+                          style: AppTextStyles.topBarTitle,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 40.0, height: 40.0),
                   ],
@@ -565,15 +758,36 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
                     ),
                     const SizedBox(height: 14.0),
 
-                    // 3. Waktu & Tempat Row
+                    // 3. Tanggal, Bulan, Tahun & Waktu Kejadian
                     CustomTextField(
-                      label: 'Waktu Kejadian *',
+                      label: 'Tanggal Kejadian (Tanggal, Bulan, Tahun) *',
                       labelGap: 7.0,
                       containerHeight: 48.0,
-                      controller: _waktuController,
-                      hintText: 'Contoh: Kamis, 05 Nov 2026 • 10:15 WIB',
-                      prefixIcon: Icons.calendar_today_outlined,
+                      borderRadius: 12.0,
+                      readOnly: true,
+                      onTap: _pickDate,
+                      controller: _tanggalController,
+                      hintText: 'Pilih tanggal kejadian...',
+                      prefixIcon: Icons.calendar_month_outlined,
                       prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    CustomTextField(
+                      label: 'Waktu / Jam Kejadian *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      readOnly: true,
+                      onTap: _pickTime,
+                      controller: _jamController,
+                      hintText: 'Pilih waktu kejadian...',
+                      prefixIcon: Icons.access_time_rounded,
+                      prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
                     ),
                     const SizedBox(height: 14.0),
 

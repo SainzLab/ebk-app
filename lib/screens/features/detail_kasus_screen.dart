@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../models/case_model.dart';
+import '../../repositories/case_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -122,7 +123,7 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
     }
   }
 
-  void _toggleStatus() {
+  Future<void> _toggleStatus() async {
     if (_isReadOnly) {
       ToastNotification.show(
         context,
@@ -132,11 +133,19 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
       );
       return;
     }
+    final nextCase = _currentCase.copyWith(
+      isCompleted: !_currentCase.isCompleted,
+    );
     setState(() {
-      _currentCase = _currentCase.copyWith(
-        isCompleted: !_currentCase.isCompleted,
-      );
+      _currentCase = nextCase;
     });
+    try {
+      final updated = await CaseRepository.instance.updateCase(nextCase);
+      if (mounted) {
+        setState(() => _currentCase = updated);
+      }
+    } catch (_) {}
+    if (!mounted) return;
     ToastNotification.show(
       context,
       message: _currentCase.isCompleted
@@ -164,6 +173,10 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
     );
 
     if (confirmed == true && mounted) {
+      try {
+        await CaseRepository.instance.deleteCase(_currentCase);
+      } catch (_) {}
+      if (!mounted) return;
       Navigator.maybePop(context);
       ToastNotification.show(
         context,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../models/user_account_model.dart';
+import '../../repositories/student_repository.dart';
+import '../../repositories/user_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -83,15 +85,43 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
     },
   ];
 
+  List<Map<String, String>> _studentOptions = List.from(_availableStudents);
+
   @override
   void initState() {
     super.initState();
     _accounts = UserAccountModel.getInitialAccounts();
+    _loadAccountsFromPocketBase();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  Future<void> _loadAccountsFromPocketBase() async {
+    try {
+      final list = await UserRepository.instance.getParentAccounts();
+      if (mounted) {
+        setState(() {
+          _accounts = list;
+        });
+      }
+      final students = await StudentRepository.instance.getStudents();
+      if (mounted && students.isNotEmpty) {
+        setState(() {
+          _studentOptions = students
+              .map(
+                (s) => {
+                  'child': s.name,
+                  'class': s.className,
+                  'nisn': s.nisn,
+                },
+              )
+              .toList();
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -370,8 +400,15 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                         label: 'Ya, Hapus',
                         variant: CustomButtonVariant.danger,
                         height: 44.0,
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(dialogCtx);
+                          try {
+                            if (!user.id.startsWith('ORTU-')) {
+                              await UserRepository.instance
+                                  .deleteParentAccount(user.id);
+                            }
+                          } catch (_) {}
+                          if (!mounted) return;
                           setState(() {
                             _accounts.removeWhere((a) => a.id == user.id);
                           });
@@ -406,11 +443,11 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
     final passwordCtrl =
         TextEditingController(text: isEdit ? '••••••••' : '12345678');
 
-    Map<String, String> selectedStudent = _availableStudents.first;
+    Map<String, String> selectedStudent = _studentOptions.first;
     if (isEdit) {
-      selectedStudent = _availableStudents.firstWhere(
-        (s) => s['child'] == editItem.studentChildName,
-        orElse: () => _availableStudents.first,
+      selectedStudent = _studentOptions.firstWhere(
+        (s) => editItem.studentChildName.startsWith(s['child']!),
+        orElse: () => _studentOptions.first,
       );
     }
 
@@ -621,7 +658,7 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                           ? 'Simpan Perubahan'
                           : 'Simpan Akun Orang Tua',
                       height: 50.0,
-                      onPressed: () {
+                      onPressed: () async {
                         if (nameCtrl.text.trim().isEmpty ||
                             usernameCtrl.text.trim().isEmpty) {
                           ToastNotification.show(
@@ -633,26 +670,11 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                           return;
                         }
 
-                        setState(() {
-                          if (isEdit) {
-                            final idx = _accounts
-                                .indexWhere((a) => a.id == editItem.id);
-                            if (idx != -1) {
-                              _accounts[idx] = _accounts[idx].copyWith(
-                                fullName: nameCtrl.text.trim(),
-                                username: usernameCtrl.text.trim(),
-                                emailOrPhone: contactCtrl.text.trim(),
-                                studentChildName: selectedStudent['child']!,
-                                studentClass: selectedStudent['class']!,
-                                studentNisn: selectedStudent['nisn']!,
-                                isActive: isActiveStatus,
-                              );
-                            }
-                          } else {
-                            final newId =
-                                'ORTU-00${_accounts.length + 1}';
-                            final newAcc = UserAccountModel(
-                              id: newId,
+                        if (isEdit) {
+                          final idx = _accounts
+                              .indexWhere((a) => a.id == editItem.id);
+                          if (idx != -1) {
+                            var updatedAcc = _accounts[idx].copyWith(
                               fullName: nameCtrl.text.trim(),
                               username: usernameCtrl.text.trim(),
                               emailOrPhone: contactCtrl.text.trim(),
@@ -660,13 +682,55 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                               studentClass: selectedStudent['class']!,
                               studentNisn: selectedStudent['nisn']!,
                               isActive: isActiveStatus,
-                              createdAt: 'Hari ini',
                             );
-                            _accounts.insert(0, newAcc);
+                            final pwd = passwordCtrl.text.trim();
+                            try {
+                              if (!editItem.id.startsWith('ORTU-')) {
+                                updatedAcc = await UserRepository.instance
+                                    .updateParentAccount(
+                                  account: updatedAcc,
+                                  newPassword:
+                                      (pwd != '••••••••' && pwd.length >= 8)
+                                          ? pwd
+                                          : null,
+                                );
+                              }
+                            } catch (_) {}
+                            if (mounted) {
+                              setState(() {
+                                _accounts[idx] = updatedAcc;
+                              });
+                            }
                           }
-                        });
+                        } else {
+                          final newId = 'ORTU-00${_accounts.length + 1}';
+                          var newAcc = UserAccountModel(
+                            id: newId,
+                            fullName: nameCtrl.text.trim(),
+                            username: usernameCtrl.text.trim(),
+                            emailOrPhone: contactCtrl.text.trim(),
+                            studentChildName: selectedStudent['child']!,
+                            studentClass: selectedStudent['class']!,
+                            studentNisn: selectedStudent['nisn']!,
+                            isActive: isActiveStatus,
+                            createdAt: 'Hari ini',
+                          );
+                          try {
+                            newAcc = await UserRepository.instance
+                                .createParentAccount(
+                              account: newAcc,
+                              password: passwordCtrl.text.trim(),
+                            );
+                          } catch (_) {}
+                          if (mounted) {
+                            setState(() {
+                              _accounts.insert(0, newAcc);
+                            });
+                          }
+                        }
 
-                        Navigator.pop(ctx);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
                         ToastNotification.show(
                           context,
                           message: isEdit

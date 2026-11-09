@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/auth_service.dart';
+import '../../repositories/analytics_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_bottom_nav.dart';
@@ -25,6 +27,28 @@ class DashboardKepsekScreen extends StatefulWidget {
 class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
   int _selectedTimeFilterIndex = 0;
   int _selectedNavIndex = 0;
+  String _totalStudentsStr = '640';
+  String _totalCasesStr = '24';
+  String _completedSessionsStr = '19';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalyticsFromPocketBase();
+  }
+
+  Future<void> _loadAnalyticsFromPocketBase() async {
+    try {
+      final summary = await AnalyticsRepository.instance.getSummary();
+      if (mounted && summary.totalStudents > 0) {
+        setState(() {
+          _totalStudentsStr = summary.totalStudents.toString();
+          _totalCasesStr = summary.totalCases.toString();
+          _completedSessionsStr = summary.completedCases.toString();
+        });
+      }
+    } catch (_) {}
+  }
 
   static const List<_MonthlyBarData> _monthlyBars = [
     _MonthlyBarData(month: 'Jun', count: 16, fillHeight: 36.0),
@@ -41,7 +65,9 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
     });
   }
 
-  void _handleLogout() {
+  Future<void> _handleLogout() async {
+    await AuthService.instance.logout();
+    if (!mounted) return;
     if (widget.onLogout != null) {
       widget.onLogout!();
     } else {
@@ -224,10 +250,10 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
-                          children: const [
+                          children: [
                             Text(
-                              '640',
-                              style: TextStyle(
+                              _totalStudentsStr,
+                              style: const TextStyle(
                                 fontFamily: AppTextStyles.fontFamily,
                                 fontSize: 28.0,
                                 height: 34.0 / 28.0,
@@ -235,8 +261,8 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                                 color: AppColors.pureWhite,
                               ),
                             ),
-                            SizedBox(width: 8.0),
-                            Text(
+                            const SizedBox(width: 8.0),
+                            const Text(
                               'Siswa Aktif (Kelas VII–IX)',
                               style: TextStyle(
                                 fontFamily: AppTextStyles.fontFamily,
@@ -283,7 +309,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                       badgeText: '-17% bln ini',
                       badgeBgColor: AppColors.successBg,
                       badgeTextColor: AppColors.successText,
-                      value: '24',
+                      value: _totalCasesStr,
                       label: 'Total Pelanggaran/Kasus',
                       onTap: () => _onNavTap(1),
                     ),
@@ -297,7 +323,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                       badgeText: '79% Tuntas',
                       badgeBgColor: AppColors.primaryTint,
                       badgeTextColor: AppColors.primaryNavy,
-                      value: '19',
+                      value: _completedSessionsStr,
                       label: 'Sesi Konseling Selesai',
                       onTap: () => _onNavTap(1),
                     ),

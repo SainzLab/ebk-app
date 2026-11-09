@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/auth_service.dart';
+import '../../models/student_model.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -35,6 +38,25 @@ class _ProfilViewState extends State<ProfilView> {
   bool _notifikasiAktif = true;
   bool _emailNotifikasi = true;
   String? _profilePhotoUrl;
+  List<StudentDataModel> _myChildren = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _emailNotifikasi = AuthService.instance.currentUserNotifyEmail;
+    if (widget.role == ProfilRole.orangTua) {
+      _loadMyChildren();
+    }
+  }
+
+  Future<void> _loadMyChildren() async {
+    try {
+      final children = await StudentRepository.instance.getMyChildren();
+      if (mounted && children.isNotEmpty) {
+        setState(() => _myChildren = children);
+      }
+    } catch (_) {}
+  }
 
   String get _title {
     switch (widget.role) {
@@ -48,6 +70,8 @@ class _ProfilViewState extends State<ProfilView> {
   }
 
   String get _name {
+    final pbName = AuthService.instance.currentUser?.getStringValue('name') ?? '';
+    if (pbName.isNotEmpty) return pbName;
     switch (widget.role) {
       case ProfilRole.guruBk:
         return 'Dra. Nurhayati, M.Pd.';
@@ -59,17 +83,34 @@ class _ProfilViewState extends State<ProfilView> {
   }
 
   String get _subDetail {
+    final nip = AuthService.instance.currentUserNip;
+    final pos = AuthService.instance.currentUserPosition;
     switch (widget.role) {
       case ProfilRole.guruBk:
+        if (nip.isNotEmpty || pos.isNotEmpty) {
+          return '${nip.isNotEmpty ? "NIP. $nip\n" : ""}${pos.isNotEmpty ? pos : "Koordinator Bimbingan Konseling"}';
+        }
         return 'NIP. 19780512 200501 2 004\nKoordinator Bimbingan Konseling';
       case ProfilRole.orangTua:
-        return 'Wali dari Ahmad Fauzi\nKelas VIII-B • NISN: 0081234567';
+        if (_myChildren.isNotEmpty) {
+          final first = _myChildren.first;
+          final extra = _myChildren.length > 1
+              ? ' (+${_myChildren.length - 1} anak lainnya)'
+              : '';
+          return 'Wali dari ${first.name}$extra\n${first.className} • NISN: ${first.nisn}';
+        }
+        return 'Wali dari Rizky Pratama\nKelas IX-B • NISN: 0094821034';
       case ProfilRole.kepalaSekolah:
+        if (nip.isNotEmpty || pos.isNotEmpty) {
+          return '${nip.isNotEmpty ? "NIP. $nip\n" : ""}${pos.isNotEmpty ? pos : "Kepala Sekolah SMPN 1 Pabuaran"}';
+        }
         return 'NIP. 19680315 199303 1 002\nKepala Sekolah SMPN 1 Pabuaran';
     }
   }
 
   String get _email {
+    final pbEmail = AuthService.instance.currentUserEmail;
+    if (pbEmail.isNotEmpty) return pbEmail;
     switch (widget.role) {
       case ProfilRole.guruBk:
         return 'nurhayati.bk@smpn1pabuaran.sch.id';
@@ -81,6 +122,8 @@ class _ProfilViewState extends State<ProfilView> {
   }
 
   String get _phone {
+    final pbPhone = AuthService.instance.currentUserPhone;
+    if (pbPhone.isNotEmpty) return pbPhone;
     switch (widget.role) {
       case ProfilRole.guruBk:
         return '+62 812-3456-7890';
@@ -165,8 +208,10 @@ class _ProfilViewState extends State<ProfilView> {
                   Expanded(
                     child: CustomButton.danger(
                       label: 'Keluar',
-                      onPressed: () {
+                      onPressed: () async {
                         Navigator.pop(ctx);
+                        await AuthService.instance.logout();
+                        if (!mounted) return;
                         if (widget.onLogout != null) {
                           widget.onLogout!();
                         } else {
@@ -657,7 +702,7 @@ class _ProfilViewState extends State<ProfilView> {
                           Switch(
                             value: _emailNotifikasi,
                             activeColor: AppColors.primaryNavy,
-                            onChanged: (val) {
+                            onChanged: (val) async {
                               setState(() => _emailNotifikasi = val);
                               ToastNotification.show(
                                 context,
@@ -666,6 +711,10 @@ class _ProfilViewState extends State<ProfilView> {
                                     : 'Notifikasi email telah dinonaktifkan',
                                 type: ToastType.success,
                               );
+                              try {
+                                await AuthService.instance
+                                    .updateProfile(notifyEmail: val);
+                              } catch (_) {}
                             },
                           ),
                         ],

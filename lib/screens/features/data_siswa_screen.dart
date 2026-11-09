@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../core/app_exception.dart';
 import '../../models/case_model.dart';
+import '../../models/student_model.dart';
+import '../../repositories/case_repository.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -9,6 +13,8 @@ import '../../widgets/toast_notification.dart';
 import '../dashboard/profil_view.dart';
 import '../states/delete_dialog.dart';
 
+export '../../models/student_model.dart';
+
 enum StudentSortOption {
   nameAsc('Nama (A – Z)'),
   nameDesc('Nama (Z – A)'),
@@ -17,58 +23,6 @@ enum StudentSortOption {
 
   final String label;
   const StudentSortOption(this.label);
-}
-
-class StudentDataModel {
-  final String name;
-  final String nis;
-  final String nisn;
-  final String className;
-  final String gradeLevel;
-  final String gender;
-  final String guardianName;
-  final String guardianRelation;
-  final String guardianPhone;
-  final String address;
-
-  const StudentDataModel({
-    required this.name,
-    required this.nis,
-    required this.nisn,
-    required this.className,
-    required this.gradeLevel,
-    required this.gender,
-    required this.guardianName,
-    required this.guardianRelation,
-    required this.guardianPhone,
-    required this.address,
-  });
-
-  StudentDataModel copyWith({
-    String? name,
-    String? nis,
-    String? nisn,
-    String? className,
-    String? gradeLevel,
-    String? gender,
-    String? guardianName,
-    String? guardianRelation,
-    String? guardianPhone,
-    String? address,
-  }) {
-    return StudentDataModel(
-      name: name ?? this.name,
-      nis: nis ?? this.nis,
-      nisn: nisn ?? this.nisn,
-      className: className ?? this.className,
-      gradeLevel: gradeLevel ?? this.gradeLevel,
-      gender: gender ?? this.gender,
-      guardianName: guardianName ?? this.guardianName,
-      guardianRelation: guardianRelation ?? this.guardianRelation,
-      guardianPhone: guardianPhone ?? this.guardianPhone,
-      address: address ?? this.address,
-    );
-  }
 }
 
 /// Halaman Kelola Data Siswa (`06 • Data Siswa (SRS-F-003)`)
@@ -140,80 +94,24 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
     'Kelas IX-C',
   ];
 
-  final List<StudentDataModel> _students = [
-    const StudentDataModel(
-      name: 'Rizky Pratama',
-      nis: '242509042',
-      nisn: '0094821034',
-      className: 'Kelas IX-B',
-      gradeLevel: 'Kelas IX',
-      gender: 'Laki-laki',
-      guardianName: 'Bapak Hendra Pratama',
-      guardianRelation: 'Ayah Kandung',
-      guardianPhone: '0812-8492-1034',
-      address: 'Jl. Raya Pabuaran No. 18, Kec. Pabuaran, Subang',
-    ),
-    const StudentDataModel(
-      name: 'Alya Putri Maharani',
-      nis: '252608014',
-      nisn: '0103948219',
-      className: 'Kelas VIII-A',
-      gradeLevel: 'Kelas VIII',
-      gender: 'Perempuan',
-      guardianName: 'Ibu Dewi Maharani',
-      guardianRelation: 'Ibu Kandung',
-      guardianPhone: '0813-9281-4420',
-      address: 'Perum Griya Pabuaran Asri Blok B2 No. 7, Subang',
-    ),
-    const StudentDataModel(
-      name: 'Dimas Aditya Saputra',
-      nis: '262707088',
-      nisn: '0112839401',
-      className: 'Kelas VII-C',
-      gradeLevel: 'Kelas VII',
-      gender: 'Laki-laki',
-      guardianName: 'Bapak Agus Saputra',
-      guardianRelation: 'Ayah Kandung',
-      guardianPhone: '0857-2104-8831',
-      address: 'Dusun Krajan RT 04/RW 02, Desa Pabuaran, Subang',
-    ),
-    const StudentDataModel(
-      name: 'Nabila Zahra Aulia',
-      nis: '242509019',
-      nisn: '0098374612',
-      className: 'Kelas IX-A',
-      gradeLevel: 'Kelas IX',
-      gender: 'Perempuan',
-      guardianName: 'Ibu Rina Kusumawati',
-      guardianRelation: 'Ibu Kandung',
-      guardianPhone: '0812-3390-7162',
-      address: 'Jl. Stasiun Pabuaran No. 45, Kec. Pabuaran, Subang',
-    ),
-    const StudentDataModel(
-      name: 'Fajar Nugraha',
-      nis: '252608053',
-      nisn: '0107462918',
-      className: 'Kelas VIII-B',
-      gradeLevel: 'Kelas VIII',
-      gender: 'Laki-laki',
-      guardianName: 'Bapak Dedi Nugraha',
-      guardianRelation: 'Ayah Kandung',
-      guardianPhone: '0878-4512-9087',
-      address: 'Kampung Sukamaju RT 02/RW 05, Desa Siluman, Pabuaran',
-    ),
-    const StudentDataModel(
-      name: 'Salsabila Khairunnisa',
-      nis: '262707021',
-      nisn: '0115920384',
-      className: 'Kelas VII-A',
-      gradeLevel: 'Kelas VII',
-      gender: 'Perempuan',
-      guardianName: 'Ibu Siti Nurjanah',
-      guardianRelation: 'Ibu Kandung',
-      guardianPhone: '0821-6743-2910',
-      address: 'Desa Salamjaya RT 01/RW 03, Kec. Pabuaran, Subang',
-    ),
-  ];
+  List<StudentDataModel> _students = List.from(StudentDataModel.defaultStudents);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStudentsFromPocketBase();
+  }
+
+  Future<void> _loadStudentsFromPocketBase() async {
+    try {
+      final list = await StudentRepository.instance.getStudents();
+      if (mounted) {
+        setState(() {
+          _students = list;
+        });
+      }
+    } catch (_) {}
+  }
 
   static String _deriveGradeLevel(String className) {
     if (className.startsWith('Kelas IX')) return 'Kelas IX';
@@ -642,6 +540,20 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
           'Apakah Anda yakin ingin menghapus data ${student.name} (NISN: ${student.nisn}) beserta riwayat kasusnya secara permanen?',
     );
     if (confirmed == true && mounted) {
+      try {
+        if (student.id.isNotEmpty && !student.id.startsWith('std-')) {
+          await StudentRepository.instance.deleteStudent(student.id);
+        }
+      } on AppException catch (e) {
+        if (!mounted) return;
+        ToastNotification.show(
+          context,
+          message: e.message,
+          type: ToastType.error,
+        );
+        return;
+      }
+      if (!mounted) return;
       setState(() {
         _students.remove(student);
       });
@@ -819,14 +731,27 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                 const SizedBox(height: 14.0),
                 // Pintasan Lihat Riwayat Kasus / Catat Kasus
                 GestureDetector(
-                  onTap: () {
+                  onTap: () async {
                     Navigator.of(sheetContext).pop();
-                    final matchedCase = CaseRecordModel.defaultCases.firstWhere(
+                    CaseRecordModel matchedCase =
+                        CaseRecordModel.defaultCases.firstWhere(
                       (c) =>
                           c.studentNisn == student.nisn ||
                           c.studentName == student.name,
                       orElse: () => CaseRecordModel.defaultCases.first,
                     );
+                    try {
+                      final cases = await CaseRepository.instance.getCases();
+                      if (cases.isNotEmpty) {
+                        matchedCase = cases.firstWhere(
+                          (c) =>
+                              c.studentNisn == student.nisn ||
+                              c.studentName == student.name,
+                          orElse: () => cases.first,
+                        );
+                      }
+                    } catch (_) {}
+                    if (!mounted) return;
                     if (widget.onOpenDetail != null) {
                       widget.onOpenDetail!(matchedCase);
                     } else {
@@ -1222,7 +1147,7 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                     ? 'Simpan Perubahan'
                                     : 'Tambah Siswa',
                                 leadingIcon: Icons.check_circle_outline_rounded,
-                                onPressed: () {
+                                onPressed: () async {
                                   final name = nameController.text.trim();
                                   final nis = nisController.text.trim();
                                   final nisn = nisnController.text.trim();
@@ -1244,7 +1169,8 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                     return;
                                   }
 
-                                  final updated = StudentDataModel(
+                                  StudentDataModel updated = StudentDataModel(
+                                    id: existingStudent?.id ?? '',
                                     name: name,
                                     nis: nis.isEmpty ? '-' : nis,
                                     nisn: nisn,
@@ -1252,6 +1178,8 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                     gradeLevel:
                                         _deriveGradeLevel(selectedClass),
                                     gender: selectedGender,
+                                    guardianId:
+                                        existingStudent?.guardianId ?? '',
                                     guardianName: guardianName,
                                     guardianRelation: guardianRelationController
                                             .text
@@ -1266,8 +1194,27 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                             .isEmpty
                                         ? 'Kec. Pabuaran, Kab. Subang'
                                         : addressController.text.trim(),
+                                    totalPoints:
+                                        existingStudent?.totalPoints ?? 0,
                                   );
 
+                                  try {
+                                    if (isEditing &&
+                                        existingStudent.id.isNotEmpty &&
+                                        !existingStudent.id
+                                            .startsWith('std-')) {
+                                      updated = await StudentRepository.instance
+                                          .updateStudent(
+                                        existingStudent.id,
+                                        updated,
+                                      );
+                                    } else {
+                                      updated = await StudentRepository.instance
+                                          .createStudent(updated);
+                                    }
+                                  } catch (_) {}
+
+                                  if (!mounted) return;
                                   setState(() {
                                     if (isEditing) {
                                       final idx =
@@ -1280,7 +1227,9 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                     }
                                   });
 
-                                  Navigator.of(sheetContext).pop();
+                                  if (sheetContext.mounted) {
+                                    Navigator.of(sheetContext).pop();
+                                  }
                                   ToastNotification.show(
                                     this.context,
                                     message: isEditing

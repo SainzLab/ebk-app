@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/counseling_model.dart';
+import '../../repositories/counseling_repository.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/toast_notification.dart';
+import '../states/delete_dialog.dart';
 
 class _WeekDayItem {
   final String dayName;
@@ -85,7 +89,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
     'Sosial / Perilaku',
   ];
 
-  static const List<Map<String, String>> _availableStudents = [
+  List<Map<String, String>> _availableStudents = [
     {'name': 'Rizky Pratama', 'class': 'Kelas IX-B', 'nisn': '0081234567'},
     {'name': 'Alya Putri Maharani', 'class': 'Kelas VIII-A', 'nisn': '0098765432'},
     {'name': 'Dimas Aditya Saputra', 'class': 'Kelas VII-C', 'nisn': '0105678912'},
@@ -98,11 +102,41 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   void initState() {
     super.initState();
     _sessions = CounselingModel.getInitialSessions();
+    _loadSessionsFromPocketBase();
+    _loadStudents();
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim().toLowerCase();
       });
     });
+  }
+
+  Future<void> _loadStudents() async {
+    try {
+      final stds = await StudentRepository.instance.getStudents();
+      if (stds.isNotEmpty && mounted) {
+        setState(() {
+          _availableStudents = stds
+              .map((s) => {
+                    'name': s.name,
+                    'class': s.className,
+                    'nisn': s.nisn,
+                  })
+              .toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadSessionsFromPocketBase() async {
+    try {
+      final list = await CounselingRepository.instance.getSessions();
+      if (mounted) {
+        setState(() {
+          _sessions = list;
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -227,22 +261,132 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   }
 
   // Aksi Toggle Status Cepat (Proses / Selesai)
-  void _toggleSessionStatus(CounselingModel session) {
-    setState(() {
-      final index = _sessions.indexWhere((s) => s.id == session.id);
-      if (index != -1) {
-        final newStatus = !_sessions[index].isCompleted;
-        _sessions[index] = _sessions[index].copyWith(isCompleted: newStatus);
+  Future<void> _toggleSessionStatus(CounselingModel session) async {
+    final index = _sessions.indexWhere((s) => s.id == session.id);
+    if (index == -1) return;
 
-        ToastNotification.show(
-          context,
-          message: newStatus
-              ? 'Layanan ${session.id} diselesaikan.'
-              : 'Status layanan ${session.id} dibuka kembali (Dalam Proses).',
-          type: ToastType.success,
-        );
-      }
+    final newStatus = !_sessions[index].isCompleted;
+    final updatedItem = _sessions[index].copyWith(isCompleted: newStatus);
+    setState(() {
+      _sessions[index] = updatedItem;
     });
+
+    try {
+      if (!session.id.startsWith('KSL-')) {
+        await CounselingRepository.instance.updateSession(updatedItem);
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    ToastNotification.show(
+      context,
+      message: newStatus
+          ? 'Layanan ${session.id} diselesaikan.'
+          : 'Status layanan ${session.id} dibuka kembali (Dalam Proses).',
+      type: ToastType.success,
+    );
+  }
+
+  // Aksi Hapus Layanan Konseling dengan Modal Konfirmasi DeleteDialog
+  Future<void> _deleteSession(CounselingModel session) async {
+    final confirmed = await DeleteDialog.show(
+      context,
+      title: 'Hapus Layanan Konseling?',
+      message:
+          'Apakah Anda yakin ingin menghapus jadwal layanan konseling ${session.id} (${session.topic} - ${session.studentName}) secara permanen?',
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        if (!session.id.startsWith('KSL-')) {
+          await CounselingRepository.instance.deleteSession(session.id);
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() {
+        _sessions.removeWhere((s) => s.id == session.id);
+      });
+
+      ToastNotification.show(
+        context,
+        message:
+            'Berhasil: Data layanan konseling ${session.studentName} telah dihapus.',
+        type: ToastType.success,
+      );
+    }
+  }
+
+  // Helper Picker Tanggal Konseling (Sesuai Gaya Kelola Data Kasus)
+  Future<DateTime?> _showCustomDatePicker(
+    BuildContext context, {
+    required DateTime initialDate,
+  }) async {
+    return showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      helpText: 'Pilih Tanggal & Tahun Konseling',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryNavy,
+              onPrimary: AppColors.pureWhite,
+              surface: AppColors.pureWhite,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.pureWhite,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+  }
+
+  // Helper Picker Waktu / Jam Konseling (Sesuai Gaya Kelola Data Kasus)
+  Future<TimeOfDay?> _showCustomTimePicker(
+    BuildContext context, {
+    required TimeOfDay initialTime,
+  }) async {
+    return showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Pilih Waktu / Jam Konseling',
+      cancelText: 'Batal',
+      confirmText: 'Pilih',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryNavy,
+              onPrimary: AppColors.pureWhite,
+              surface: AppColors.pureWhite,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.pureWhite,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
   }
 
   // Modal Bottom Sheet: Filter & Urutan
@@ -774,23 +918,33 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     CustomButton(
                       label: 'Simpan Pembinaan & Hasil',
                       height: 50.0,
-                      onPressed: () {
-                        setState(() {
-                          final idx = _sessions
-                              .indexWhere((s) => s.id == session.id);
-                          if (idx != -1) {
-                            _sessions[idx] = _sessions[idx].copyWith(
-                              counselingType: selectedType,
-                              topic: topicCtrl.text.trim().isEmpty
-                                  ? session.topic
-                                  : topicCtrl.text.trim(),
-                              resultNotes: resultsCtrl.text.trim(),
-                              followUpPlan: followUpCtrl.text.trim(),
-                              isCompleted: isCompletedStatus,
-                            );
+                      onPressed: () async {
+                        final idx =
+                            _sessions.indexWhere((s) => s.id == session.id);
+                        if (idx != -1) {
+                          var updatedItem = _sessions[idx].copyWith(
+                            counselingType: selectedType,
+                            topic: topicCtrl.text.trim().isEmpty
+                                ? session.topic
+                                : topicCtrl.text.trim(),
+                            resultNotes: resultsCtrl.text.trim(),
+                            followUpPlan: followUpCtrl.text.trim(),
+                            isCompleted: isCompletedStatus,
+                          );
+                          try {
+                            if (!session.id.startsWith('KSL-')) {
+                              updatedItem = await CounselingRepository.instance
+                                  .updateSession(updatedItem);
+                            }
+                          } catch (_) {}
+                          if (mounted) {
+                            setState(() {
+                              _sessions[idx] = updatedItem;
+                            });
                           }
-                        });
-                        Navigator.pop(ctx);
+                        }
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
                         ToastNotification.show(
                           context,
                           message:
@@ -814,8 +968,14 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
     Map<String, String> selectedStudent = _availableStudents.first;
     String selectedType = _counselingTypes.first;
     final topicCtrl = TextEditingController();
-    final timeCtrl = TextEditingController(text: '09:00 – 09:45 WIB');
-    int selectedDay = _selectedDayIndex;
+    DateTime selectedDateTime = DateTime.now();
+    final tanggalCtrl = TextEditingController(
+      text: DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(selectedDateTime),
+    );
+    final timeCtrl = TextEditingController(
+      text:
+          '${DateFormat('HH:mm').format(selectedDateTime)} – ${DateFormat('HH:mm').format(selectedDateTime.add(const Duration(minutes: 45)))} WIB',
+    );
 
     showModalBottomSheet(
       context: context,
@@ -873,7 +1033,11 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<Map<String, String>>(
-                          value: selectedStudent,
+                          value: _availableStudents.any(
+                                  (s) => s['nisn'] == selectedStudent['nisn'])
+                              ? _availableStudents.firstWhere(
+                                  (s) => s['nisn'] == selectedStudent['nisn'])
+                              : selectedStudent,
                           isExpanded: true,
                           icon: const Icon(
                             Icons.keyboard_arrow_down_rounded,
@@ -914,66 +1078,91 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     ),
                     const SizedBox(height: 14.0),
 
-                    // 3. Hari Konseling
-                    const Text('Pilih Hari (Pekan Ini)',
-                        style: AppTextStyles.label),
-                    const SizedBox(height: 7.0),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: List.generate(_weekDays.length, (idx) {
-                          final item = _weekDays[idx];
-                          final isSel = selectedDay == idx;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: GestureDetector(
-                              onTap: () => setModalState(() => selectedDay = idx),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8.0,
-                                  horizontal: 12.0,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isSel
-                                      ? AppColors.primaryNavy
-                                      : AppColors.canvasLightGray,
-                                  borderRadius: BorderRadius.circular(10.0),
-                                ),
-                                child: Text(
-                                  '${item.dayName} ${item.dateNum} Nov',
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.fontFamily,
-                                    fontSize: 12.0,
-                                    fontWeight: FontWeight.w600,
-                                    color: isSel
-                                        ? AppColors.pureWhite
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
+                    // 3. Tanggal Konseling (Tanggal, Bulan, Tahun) *
+                    CustomTextField(
+                      label: 'Tanggal Konseling (Tanggal, Bulan, Tahun) *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      readOnly: true,
+                      controller: tanggalCtrl,
+                      hintText: 'Pilih tanggal konseling...',
+                      prefixIcon: Icons.calendar_month_outlined,
+                      prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
+                      onTap: () async {
+                        final picked = await _showCustomDatePicker(
+                          context,
+                          initialDate: selectedDateTime,
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            selectedDateTime = DateTime(
+                              picked.year,
+                              picked.month,
+                              picked.day,
+                              selectedDateTime.hour,
+                              selectedDateTime.minute,
+                            );
+                            tanggalCtrl.text = DateFormat(
+                                    'EEEE, dd MMMM yyyy', 'id_ID')
+                                .format(selectedDateTime);
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 14.0),
 
-                    // 4. Jam / Waktu Pelaksanaan
-                    const Text('Waktu Pelaksanaan', style: AppTextStyles.label),
-                    const SizedBox(height: 7.0),
+                    // 4. Waktu / Jam Pelaksanaan *
                     CustomTextField(
+                      label: 'Waktu / Jam Pelaksanaan *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      readOnly: true,
                       controller: timeCtrl,
-                      hintText: 'Contoh: 09:30 – 10:15 WIB',
+                      hintText: 'Pilih waktu pelaksanaan...',
                       prefixIcon: Icons.access_time_rounded,
+                      prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
+                      onTap: () async {
+                        final picked = await _showCustomTimePicker(
+                          context,
+                          initialTime: TimeOfDay(
+                            hour: selectedDateTime.hour,
+                            minute: selectedDateTime.minute,
+                          ),
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            final start = DateTime(
+                              selectedDateTime.year,
+                              selectedDateTime.month,
+                              selectedDateTime.day,
+                              picked.hour,
+                              picked.minute,
+                            );
+                            final end = start.add(const Duration(minutes: 45));
+                            selectedDateTime = start;
+                            timeCtrl.text =
+                                '${DateFormat('HH:mm').format(start)} – ${DateFormat('HH:mm').format(end)} WIB';
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 14.0),
 
                     // 5. Topik Konseling
-                    const Text('Topik Bimbingan', style: AppTextStyles.label),
-                    const SizedBox(height: 7.0),
                     CustomTextField(
+                      label: 'Topik Bimbingan *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
                       controller: topicCtrl,
-                      hintText: 'Contoh: Pembinaan Motivasi dan Kedisiplinan Belajar',
+                      hintText:
+                          'Contoh: Pembinaan Motivasi dan Kedisiplinan Belajar',
                       prefixIcon: Icons.assignment_outlined,
                     ),
                     const SizedBox(height: 24.0),
@@ -982,25 +1171,31 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     CustomButton(
                       label: 'Jadwalkan Layanan',
                       height: 50.0,
-                      onPressed: () {
+                      onPressed: () async {
                         if (topicCtrl.text.trim().isEmpty) {
                           ToastNotification.show(
                             context,
-                            message: 'Peringatan: Mohon lengkapi topik bimbingan.',
+                            message:
+                                'Peringatan: Mohon lengkapi topik bimbingan.',
                             type: ToastType.error,
                           );
                           return;
                         }
 
+                        final dayIdx =
+                            (selectedDateTime.weekday - 1).clamp(0, 6);
+                        final dateStr =
+                            DateFormat('EEEE, dd MMM yyyy', 'id_ID')
+                                .format(selectedDateTime);
                         final newId = 'KSL-0${_sessions.length + 1}';
-                        final newSession = CounselingModel(
+                        CounselingModel newSession = CounselingModel(
                           id: newId,
                           studentName: selectedStudent['name']!,
                           studentClass: selectedStudent['class']!,
                           studentNisn: selectedStudent['nisn']!,
-                          dateStr:
-                              '${_weekDays[selectedDay].dayName}, ${_weekDays[selectedDay].dateNum} Nov 2026',
-                          dayIndex: selectedDay,
+                          dateStr: dateStr,
+                          dayIndex: dayIdx,
+                          sessionDate: selectedDateTime,
                           timeRange: timeCtrl.text.trim().isEmpty
                               ? '09:00 – 09:45 WIB'
                               : timeCtrl.text.trim(),
@@ -1009,18 +1204,508 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                           isCompleted: false,
                         );
 
+                        try {
+                          newSession = await CounselingRepository.instance
+                              .createSession(newSession);
+                        } catch (_) {}
+
+                        if (!mounted) return;
                         setState(() {
                           _sessions.insert(0, newSession);
-                          _selectedDayIndex = selectedDay;
+                          _selectedDayIndex = dayIdx;
                         });
 
-                        Navigator.pop(ctx);
+                        if (ctx.mounted) Navigator.pop(ctx);
                         ToastNotification.show(
                           context,
                           message:
                               'Berhasil: Jadwal konseling baru untuk ${newSession.studentName} telah ditambahkan.',
                           type: ToastType.success,
                         );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Modal Bottom Sheet: Edit Lengkap Data Layanan Konseling (SRS-F-005)
+  void _showEditScheduleSheet(CounselingModel session) {
+    Map<String, String> selectedStudent = _availableStudents.firstWhere(
+      (s) =>
+          s['name'] == session.studentName || s['nisn'] == session.studentNisn,
+      orElse: () => {
+        'name': session.studentName,
+        'class': session.studentClass,
+        'nisn': session.studentNisn,
+      },
+    );
+    String selectedType = session.counselingType;
+    DateTime selectedDateTime = session.resolvedDate;
+    final tanggalCtrl = TextEditingController(
+      text: DateFormat('EEEE, dd MMMM yyyy', 'id_ID').format(selectedDateTime),
+    );
+    final timeCtrl = TextEditingController(text: session.timeRange);
+    final topicCtrl = TextEditingController(text: session.topic);
+    final resultsCtrl = TextEditingController(text: session.resultNotes);
+    final followUpCtrl = TextEditingController(text: session.followUpPlan);
+    bool isCompletedStatus = session.isCompleted;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.pureWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 18.0,
+                left: 20.0,
+                right: 20.0,
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24.0,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle Bar
+                    Center(
+                      child: Container(
+                        width: 40.0,
+                        height: 4.0,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderNeutral,
+                          borderRadius: BorderRadius.circular(99.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // Header: ID, Judul & Tombol Hapus Cepat
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4.0,
+                                  horizontal: 8.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(6.0),
+                                ),
+                                child: Text(
+                                  session.id,
+                                  style: AppTextStyles.badgeBold10,
+                                ),
+                              ),
+                              const SizedBox(width: 8.0),
+                              const Flexible(
+                                child: Text(
+                                  'Edit Data Layanan Konseling',
+                                  style: AppTextStyles.heading2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          iconSize: 22.0,
+                          tooltip: 'Hapus Layanan',
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _deleteSession(session);
+                          },
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.errorPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 1. Pilih Siswa
+                    const Text('Pilih Siswa', style: AppTextStyles.label),
+                    const SizedBox(height: 7.0),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14.0),
+                      decoration: BoxDecoration(
+                        color: AppColors.pureWhite,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(
+                          color: AppColors.borderNeutral,
+                          width: 1.0,
+                        ),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<Map<String, String>>(
+                          value: _availableStudents.any(
+                                  (s) => s['nisn'] == selectedStudent['nisn'])
+                              ? _availableStudents.firstWhere(
+                                  (s) => s['nisn'] == selectedStudent['nisn'])
+                              : selectedStudent,
+                          isExpanded: true,
+                          icon: const Icon(
+                            Icons.keyboard_arrow_down_rounded,
+                            color: AppColors.primaryNavy,
+                          ),
+                          items: [
+                            if (!_availableStudents.any(
+                                (s) => s['nisn'] == selectedStudent['nisn']))
+                              DropdownMenuItem<Map<String, String>>(
+                                value: selectedStudent,
+                                child: Text(
+                                  '${selectedStudent['name']} • ${selectedStudent['class']} (${selectedStudent['nisn']})',
+                                  style: AppTextStyles.body,
+                                ),
+                              ),
+                            ..._availableStudents.map((s) {
+                              return DropdownMenuItem<Map<String, String>>(
+                                value: s,
+                                child: Text(
+                                  '${s['name']} • ${s['class']} (${s['nisn']})',
+                                  style: AppTextStyles.body,
+                                ),
+                              );
+                            }),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) {
+                              setModalState(() => selectedStudent = val);
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 2. Jenis Konseling
+                    const Text('Jenis Konseling', style: AppTextStyles.label),
+                    const SizedBox(height: 7.0),
+                    Wrap(
+                      spacing: 8.0,
+                      runSpacing: 8.0,
+                      children: _counselingTypes.map((type) {
+                        return _FilterOptionChip(
+                          label: type,
+                          isSelected: selectedType == type,
+                          onTap: () => setModalState(() => selectedType = type),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 3. Tanggal Konseling (Tanggal, Bulan, Tahun) *
+                    CustomTextField(
+                      label: 'Tanggal Konseling (Tanggal, Bulan, Tahun) *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      readOnly: true,
+                      controller: tanggalCtrl,
+                      hintText: 'Pilih tanggal konseling...',
+                      prefixIcon: Icons.calendar_month_outlined,
+                      prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
+                      onTap: () async {
+                        final picked = await _showCustomDatePicker(
+                          context,
+                          initialDate: selectedDateTime,
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            selectedDateTime = DateTime(
+                              picked.year,
+                              picked.month,
+                              picked.day,
+                              selectedDateTime.hour,
+                              selectedDateTime.minute,
+                            );
+                            tanggalCtrl.text = DateFormat(
+                                    'EEEE, dd MMMM yyyy', 'id_ID')
+                                .format(selectedDateTime);
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 4. Waktu / Jam Pelaksanaan *
+                    CustomTextField(
+                      label: 'Waktu / Jam Pelaksanaan *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      readOnly: true,
+                      controller: timeCtrl,
+                      hintText: 'Pilih waktu pelaksanaan...',
+                      prefixIcon: Icons.access_time_rounded,
+                      prefixIconColor: AppColors.primaryNavy,
+                      suffixIcon: Icons.keyboard_arrow_down_rounded,
+                      suffixIconColor: AppColors.textMuted,
+                      onTap: () async {
+                        final picked = await _showCustomTimePicker(
+                          context,
+                          initialTime: TimeOfDay(
+                            hour: selectedDateTime.hour,
+                            minute: selectedDateTime.minute,
+                          ),
+                        );
+                        if (picked != null) {
+                          setModalState(() {
+                            final start = DateTime(
+                              selectedDateTime.year,
+                              selectedDateTime.month,
+                              selectedDateTime.day,
+                              picked.hour,
+                              picked.minute,
+                            );
+                            final end = start.add(const Duration(minutes: 45));
+                            selectedDateTime = start;
+                            timeCtrl.text =
+                                '${DateFormat('HH:mm').format(start)} – ${DateFormat('HH:mm').format(end)} WIB';
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 5. Topik Bimbingan Konseling
+                    CustomTextField(
+                      label: 'Topik Bimbingan Konseling *',
+                      labelGap: 7.0,
+                      containerHeight: 48.0,
+                      borderRadius: 12.0,
+                      controller: topicCtrl,
+                      hintText: 'Masukkan fokus topik bimbingan konseling',
+                      prefixIcon: Icons.menu_book_rounded,
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 6. Catatan Hasil Konseling / Diskusi
+                    const Text('Catatan Hasil Konseling / Diskusi',
+                        style: AppTextStyles.label),
+                    const SizedBox(height: 7.0),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.pureWhite,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(
+                          color: AppColors.borderNeutral,
+                          width: 1.0,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: resultsCtrl,
+                        maxLines: 3,
+                        style: AppTextStyles.body,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Catat evaluasi, hasil diskusi, dan respons keterbukaan siswa...',
+                          hintStyle: AppTextStyles.body,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.all(12.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 7. Rencana Tindak Lanjut Siswa
+                    const Text('Rencana Tindak Lanjut Siswa',
+                        style: AppTextStyles.label),
+                    const SizedBox(height: 7.0),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.pureWhite,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(
+                          color: AppColors.borderNeutral,
+                          width: 1.0,
+                        ),
+                      ),
+                      child: TextField(
+                        controller: followUpCtrl,
+                        maxLines: 3,
+                        style: AppTextStyles.body,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Tuliskan langkah pemantauan berkala, koordinasi wali kelas/ortu...',
+                          hintStyle: AppTextStyles.body,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.all(12.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 8. Status Layanan Konseling
+                    const Text('Status Layanan Konseling',
+                        style: AppTextStyles.label),
+                    const SizedBox(height: 8.0),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setModalState(() => isCompletedStatus = false),
+                            child: Container(
+                              height: 42.0,
+                              decoration: BoxDecoration(
+                                color: !isCompletedStatus
+                                    ? AppColors.warningBg
+                                    : AppColors.inputSurfaceGray,
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(
+                                  color: !isCompletedStatus
+                                      ? AppColors.warningAccent
+                                      : AppColors.borderNeutral,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Dalam Proses',
+                                style: AppTextStyles.metaSemibold12.copyWith(
+                                  color: !isCompletedStatus
+                                      ? AppColors.warningText
+                                      : AppColors.textSecondary,
+                                  fontWeight: !isCompletedStatus
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10.0),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () =>
+                                setModalState(() => isCompletedStatus = true),
+                            child: Container(
+                              height: 42.0,
+                              decoration: BoxDecoration(
+                                color: isCompletedStatus
+                                    ? AppColors.successBg
+                                    : AppColors.inputSurfaceGray,
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(
+                                  color: isCompletedStatus
+                                      ? AppColors.successBorder
+                                      : AppColors.borderNeutral,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Selesai Dibina',
+                                style: AppTextStyles.metaSemibold12.copyWith(
+                                  color: isCompletedStatus
+                                      ? AppColors.successText
+                                      : AppColors.textSecondary,
+                                  fontWeight: isCompletedStatus
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24.0),
+
+                    // Tombol Simpan Perubahan Data
+                    CustomButton(
+                      label: 'Simpan Perubahan Data',
+                      height: 50.0,
+                      onPressed: () async {
+                        if (topicCtrl.text.trim().isEmpty) {
+                          ToastNotification.show(
+                            context,
+                            message:
+                                'Peringatan: Topik bimbingan tidak boleh kosong.',
+                            type: ToastType.error,
+                          );
+                          return;
+                        }
+
+                        final idx =
+                            _sessions.indexWhere((s) => s.id == session.id);
+                        if (idx != -1) {
+                          final dayIdx =
+                              (selectedDateTime.weekday - 1).clamp(0, 6);
+                          final dateStr =
+                              DateFormat('EEEE, dd MMM yyyy', 'id_ID')
+                                  .format(selectedDateTime);
+
+                          var updatedItem = _sessions[idx].copyWith(
+                            studentName: selectedStudent['name']!,
+                            studentClass: selectedStudent['class']!,
+                            studentNisn: selectedStudent['nisn']!,
+                            counselingType: selectedType,
+                            dateStr: dateStr,
+                            dayIndex: dayIdx,
+                            sessionDate: selectedDateTime,
+                            timeRange: timeCtrl.text.trim().isEmpty
+                                ? session.timeRange
+                                : timeCtrl.text.trim(),
+                            topic: topicCtrl.text.trim(),
+                            resultNotes: resultsCtrl.text.trim(),
+                            followUpPlan: followUpCtrl.text.trim(),
+                            isCompleted: isCompletedStatus,
+                          );
+
+                          try {
+                            if (!session.id.startsWith('KSL-')) {
+                              updatedItem = await CounselingRepository.instance
+                                  .updateSession(updatedItem);
+                            }
+                          } catch (_) {}
+
+                          if (mounted) {
+                            setState(() {
+                              _sessions[idx] = updatedItem;
+                              _selectedDayIndex = dayIdx;
+                            });
+                          }
+                        }
+
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!mounted) return;
+                        ToastNotification.show(
+                          context,
+                          message:
+                              'Berhasil: Data layanan ${session.id} telah diperbarui.',
+                          type: ToastType.success,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10.0),
+
+                    // Tombol Hapus Layanan
+                    CustomButton(
+                      label: 'Hapus Layanan Konseling',
+                      variant: CustomButtonVariant.secondary,
+                      height: 46.0,
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _deleteSession(session);
                       },
                     ),
                   ],
@@ -1067,7 +1752,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                 ),
                 const SizedBox(height: 14.0),
 
-                // Baris ID & Status (Tanpa Dot)
+                // Baris ID, Status & Tombol Hapus Cepat
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1085,26 +1770,45 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                         style: AppTextStyles.badgeBold10,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4.0,
-                        horizontal: 10.0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: session.isCompleted
-                            ? AppColors.successBg
-                            : AppColors.warningBg,
-                        borderRadius: BorderRadius.circular(99.0),
-                      ),
-                      child: Text(
-                        session.statusLabel,
-                        style: AppTextStyles.captionSemibold11.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: session.isCompleted
-                              ? AppColors.successText
-                              : AppColors.warningText,
+                    Row(
+                      children: [
+                        IconButton(
+                          iconSize: 20.0,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Hapus Layanan',
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _deleteSession(session);
+                          },
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.errorPrimary,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8.0),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 4.0,
+                            horizontal: 10.0,
+                          ),
+                          decoration: BoxDecoration(
+                            color: session.isCompleted
+                                ? AppColors.successBg
+                                : AppColors.warningBg,
+                            borderRadius: BorderRadius.circular(99.0),
+                          ),
+                          child: Text(
+                            session.statusLabel,
+                            style: AppTextStyles.captionSemibold11.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: session.isCompleted
+                                  ? AppColors.successText
+                                  : AppColors.warningText,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1200,12 +1904,24 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                 ),
                 const SizedBox(height: 20.0),
 
-                // Action Buttons
+                // Action Buttons Bar (Edit, Catat Hasil, Toggle Status)
                 Row(
                   children: [
                     Expanded(
                       child: CustomButton(
-                        label: 'Catat / Edit Hasil',
+                        label: 'Edit Data',
+                        variant: CustomButtonVariant.secondary,
+                        height: 44.0,
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _showEditScheduleSheet(session);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Expanded(
+                      child: CustomButton(
+                        label: 'Catat Hasil',
                         variant: CustomButtonVariant.secondary,
                         height: 44.0,
                         onPressed: () {
@@ -1214,7 +1930,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 10.0),
+                    const SizedBox(width: 8.0),
                     Expanded(
                       child: CustomButton(
                         label: session.isCompleted
@@ -1367,9 +2083,11 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
 
                 // Expanded Scrollable Content
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 96.0),
-                    children: [
+                  child: RefreshIndicator(
+                    onRefresh: _loadSessionsFromPocketBase,
+                    child: ListView(
+                      padding: const EdgeInsets.only(bottom: 96.0),
+                      children: [
                       // Kalender Mingguan (Weekly Calendar UI)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -1815,12 +2533,15 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                                   _showRecordResultSheet(session),
                               onToggleStatus: () =>
                                   _toggleSessionStatus(session),
+                              onEdit: () => _showEditScheduleSheet(session),
+                              onDelete: () => _deleteSession(session),
                             );
                           },
                         ),
                     ],
                   ),
                 ),
+              ),
               ],
             ),
 
@@ -1860,18 +2581,22 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   }
 }
 
-/// Widget Kartu Layanan Konseling dengan Dukungan Catat Hasil & Toggle Status
+/// Widget Kartu Layanan Konseling dengan Dukungan Hapus, Edit & Detail (Gaya Kelola Data Kasus)
 class _CounselingCardItem extends StatelessWidget {
   final CounselingModel session;
   final VoidCallback onTapDetail;
   final VoidCallback onRecordResult;
   final VoidCallback onToggleStatus;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _CounselingCardItem({
     required this.session,
     required this.onTapDetail,
     required this.onRecordResult,
     required this.onToggleStatus,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -2075,114 +2800,143 @@ class _CounselingCardItem extends StatelessWidget {
 
                 const SizedBox(height: 12.0),
 
-                // Action Buttons Row (gap: 8.0)
+                // Baris Aksi Footer: Toggle Status, Hapus, Edit, & Detail (sama seperti Kelola Kasus)
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Tombol 1: Catat / Edit Hasil
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: onRecordResult,
-                        child: Container(
-                          height: 32.0,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 6.0,
-                            horizontal: 8.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.pureWhite,
-                            borderRadius: BorderRadius.circular(10.0),
-                            border: Border.all(
-                              color: AppColors.borderNeutral,
-                              width: 1.0,
-                            ),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.edit_note_rounded,
-                                size: 15.0,
-                                color: AppColors.primaryNavy,
-                              ),
-                              SizedBox(width: 4.0),
-                              Flexible(
-                                child: Text(
-                                  'Catat / Edit Hasil',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.fontFamily,
-                                    fontSize: 11.0,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.primaryNavy,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                    // Quick Toggle Status Pill
+                    GestureDetector(
+                      onTap: onToggleStatus,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 5.0,
+                          horizontal: 9.0,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8.0),
-
-                    // Tombol 2: Selesaikan / Buka Kembali (Toggle Status)
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: onToggleStatus,
-                        child: Container(
-                          height: 32.0,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 6.0,
-                            horizontal: 8.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: session.isCompleted
-                                ? AppColors.canvasLightGray
-                                : AppColors.primaryNavy,
-                            borderRadius: BorderRadius.circular(10.0),
-                            border: session.isCompleted
-                                ? Border.all(
-                                    color: AppColors.borderNeutral,
-                                    width: 1.0,
-                                  )
-                                : null,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                session.isCompleted
-                                    ? Icons.refresh_rounded
-                                    : Icons.check_rounded,
-                                size: 14.0,
+                        decoration: BoxDecoration(
+                          color: session.isCompleted
+                              ? AppColors.canvasLightGray
+                              : AppColors.primaryNavy,
+                          borderRadius: BorderRadius.circular(8.0),
+                          border: session.isCompleted
+                              ? Border.all(
+                                  color: AppColors.borderNeutral,
+                                  width: 1.0,
+                                )
+                              : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              session.isCompleted
+                                  ? Icons.refresh_rounded
+                                  : Icons.check_rounded,
+                              size: 13.0,
+                              color: session.isCompleted
+                                  ? AppColors.textSecondary
+                                  : AppColors.pureWhite,
+                            ),
+                            const SizedBox(width: 4.0),
+                            Text(
+                              session.isCompleted
+                                  ? 'Buka Kembali'
+                                  : 'Selesaikan',
+                              style: TextStyle(
+                                fontFamily: AppTextStyles.fontFamily,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
                                 color: session.isCompleted
                                     ? AppColors.textSecondary
                                     : AppColors.pureWhite,
                               ),
-                              const SizedBox(width: 4.0),
-                              Flexible(
-                                child: Text(
-                                  session.isCompleted
-                                      ? 'Buka Kembali'
-                                      : 'Selesaikan',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: AppTextStyles.fontFamily,
-                                    fontSize: 11.0,
-                                    fontWeight: FontWeight.w700,
-                                    color: session.isCompleted
-                                        ? AppColors.textSecondary
-                                        : AppColors.pureWhite,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
+                    ),
+
+                    // Tombol Aksi (Hapus, Edit, Detail)
+                    Row(
+                      children: [
+                        // Tombol Hapus
+                        IconButton(
+                          iconSize: 18.0,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          tooltip: 'Hapus Layanan',
+                          onPressed: onDelete,
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                        const SizedBox(width: 14.0),
+                        // Tombol Edit
+                        GestureDetector(
+                          onTap: onEdit,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4.0,
+                              horizontal: 10.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.pureWhite,
+                              borderRadius: BorderRadius.circular(8.0),
+                              border: Border.all(
+                                color: AppColors.borderNeutral,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.edit_outlined,
+                                  size: 13.0,
+                                  color: AppColors.primaryNavy,
+                                ),
+                                const SizedBox(width: 4.0),
+                                Text(
+                                  'Edit',
+                                  style:
+                                      AppTextStyles.badgeSemibold10.copyWith(
+                                    fontSize: 11.0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8.0),
+                        // Tombol Detail
+                        GestureDetector(
+                          onTap: onTapDetail,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4.0,
+                              horizontal: 10.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryTint,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Detail',
+                                  style: AppTextStyles.badgeBold10.copyWith(
+                                    fontSize: 11.0,
+                                  ),
+                                ),
+                                const SizedBox(width: 2.0),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 14.0,
+                                  color: AppColors.primaryNavy,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
