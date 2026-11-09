@@ -372,4 +372,205 @@ void main() {
     // Verify toast appears
     expect(find.text('Foto profil berhasil dipilih dari galeri.'), findsOneWidget);
   });
+
+  testWidgets(
+      'DataSiswaScreen read-only mode for Kepala Sekolah (no add, edit, or delete)',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DataSiswaScreen(
+          role: ProfilRole.kepalaSekolah,
+          isReadOnly: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify title is present without unnecessary notice banners/badges
+    expect(find.text('Data Siswa'), findsOneWidget);
+    expect(find.text('Hanya Lihat • Kepala Sekolah'), findsNothing);
+    expect(
+      find.text(
+          'Akun Kepala Sekolah memiliki hak akses melihat data siswa tanpa opsi tambah, ubah, atau hapus.'),
+      findsNothing,
+    );
+
+    // 2. Verify FAB (+) Tambah Siswa is NOT present
+    expect(find.byIcon(Icons.add_rounded), findsNothing);
+
+    // 3. Verify student card can be tapped to view details
+    expect(find.text('Rizky Pratama'), findsOneWidget);
+    await tester.tap(find.text('Rizky Pratama'));
+    await tester.pumpAndSettle();
+
+    // 4. Verify detail modal sheet shows details without notice banner and without edit/delete buttons
+    expect(find.text('NIS / NISN'), findsOneWidget);
+    expect(find.text('242509042 / 0094821034'), findsOneWidget);
+    expect(find.text('Bapak Hendra Pratama (Ayah Kandung)'), findsOneWidget);
+    expect(
+      find.text(
+          'Mode Lihat Saja: Role Kepala Sekolah tidak memiliki izin mengubah atau menghapus data siswa.'),
+      findsNothing,
+    );
+
+    // Edit and Delete buttons MUST NOT exist
+    expect(find.text('Edit Data'), findsNothing);
+    expect(find.text('Hapus Siswa'), findsNothing);
+
+    // Close button MUST exist
+    expect(find.text('Tutup Detail Siswa'), findsOneWidget);
+    await tester.tap(find.text('Tutup Detail Siswa'));
+    await tester.pumpAndSettle();
+
+    // 5. Verify long-press on student card does NOT open delete dialog
+    await tester.longPress(find.text('Rizky Pratama'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hapus Data Siswa?'), findsNothing);
+  });
+
+  testWidgets(
+      'DataSiswaScreen full CRUD access for Guru BK (can add, edit, and delete)',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DataSiswaScreen(
+          role: ProfilRole.guruBk,
+          isReadOnly: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify FAB (+) Tambah Siswa IS present
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+
+    // 2. Verify student card can be tapped to view details
+    await tester.tap(find.text('Rizky Pratama'));
+    await tester.pumpAndSettle();
+
+    // 3. Verify detail modal sheet shows Edit and Delete buttons for Guru BK
+    expect(find.text('Edit Data'), findsOneWidget);
+    expect(find.text('Hapus Siswa'), findsOneWidget);
+    expect(find.text('Tutup Detail Siswa'), findsNothing);
+  });
+
+  testWidgets(
+      'DetailKasusScreen read-only mode for Kepala Sekolah (no edit, complete, or delete buttons)',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DetailKasusScreen(
+          role: ProfilRole.kepalaSekolah,
+          isReadOnly: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify Top Bar title is present without read-only notice badge
+    expect(find.text('Detail Kasus'), findsOneWidget);
+    expect(find.text('Hanya Lihat • Kepala Sekolah'), findsNothing);
+
+    // 2. Verify case information is displayed properly
+    expect(find.text('Membolos Sekolah saat Jam Efektif'), findsOneWidget);
+    expect(find.text('Catatan Penanganan Guru BK'), findsOneWidget);
+
+    // 3. Verify read-only notice banner is NOT present
+    expect(
+      find.text(
+          'Mode Lihat Saja: Role Kepala Sekolah tidak memiliki akses untuk mengubah status (selesai), mengedit, atau menghapus riwayat kasus.'),
+      findsNothing,
+    );
+
+    // 4. Verify Edit, Tandai Selesai / Buka Kembali, and Hapus buttons DO NOT exist
+    expect(find.text('Edit Kasus'), findsNothing);
+    expect(find.text('Tandai Selesai'), findsNothing);
+    expect(find.text('Buka Kembali'), findsNothing);
+    expect(find.text('Hapus Catatan Kasus'), findsNothing);
+
+    // 5. Verify Kembali button is present
+    expect(find.text('Kembali'), findsOneWidget);
+  });
+
+  testWidgets(
+      'DetailKasusScreen full action mode for Guru BK (has edit, complete, and delete buttons)',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: DetailKasusScreen(
+          role: ProfilRole.guruBk,
+          isReadOnly: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify Guru BK can see all 3 action buttons
+    expect(find.text('Edit Kasus'), findsOneWidget);
+    expect(find.text('Tandai Selesai'), findsOneWidget);
+    expect(find.text('Hapus Catatan Kasus'), findsOneWidget);
+
+    // 2. Read-only banner and badge MUST NOT be present
+    expect(find.text('Hanya Lihat • Kepala Sekolah'), findsNothing);
+    expect(find.text('Kembali'), findsNothing);
+  });
+
+  testWidgets(
+      'DataSiswaScreen to DetailKasusScreen navigation preserves read-only mode for Kepala Sekolah',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        initialRoute: '/data-siswa',
+        routes: {
+          '/data-siswa': (_) => const DataSiswaScreen(
+                role: ProfilRole.kepalaSekolah,
+                isReadOnly: true,
+              ),
+          '/detail-kasus': (_) => const DetailKasusScreen(),
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap on Dimas Aditya Saputra
+    await tester.tap(find.text('Dimas Aditya Saputra'));
+    await tester.pumpAndSettle();
+
+    // Tap on "Lihat Riwayat Kasus & Catatan BK Siswa"
+    await tester.tap(find.text('Lihat Riwayat Kasus & Catatan BK Siswa'));
+    await tester.pumpAndSettle();
+
+    // Verify Detail Kasus screen opened in read-only mode (no edit/complete/delete)
+    expect(find.text('Detail Kasus'), findsOneWidget);
+    expect(find.text('Hanya Lihat • Kepala Sekolah'), findsNothing);
+    expect(find.text('Edit Kasus'), findsNothing);
+    expect(find.text('Tandai Selesai'), findsNothing);
+    expect(find.text('Hapus Catatan Kasus'), findsNothing);
+    expect(find.text('Kembali'), findsOneWidget);
+  });
 }

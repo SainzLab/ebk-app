@@ -84,6 +84,8 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
     switch (_activeSubView!) {
       case _GuruSubView.dataSiswa:
         return DataSiswaScreen(
+          role: ProfilRole.guruBk,
+          isReadOnly: false,
           onBack: _closeSubView,
           onOpenDetail: (caseItem) {
             setState(() {
@@ -119,6 +121,8 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
       case _GuruSubView.detailKasus:
         return DetailKasusScreen(
           caseData: _selectedCaseForDetail,
+          role: ProfilRole.guruBk,
+          isReadOnly: false,
           onBack: _closeSubView,
           onOpenEdit: (caseToEdit) {
             setState(() {

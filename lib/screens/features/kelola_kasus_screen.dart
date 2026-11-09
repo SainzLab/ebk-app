@@ -679,8 +679,6 @@ class _KelolaKasusScreenState extends State<KelolaKasusScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredList = _filteredCases;
-    final int activeCount = _cases.where((c) => !c.isCompleted).length;
-    final int completedCount = _cases.where((c) => c.isCompleted).length;
 
     return Scaffold(
       backgroundColor: AppColors.canvasLightGray,
@@ -801,58 +799,6 @@ class _KelolaKasusScreenState extends State<KelolaKasusScreen> {
                                   ),
                               ],
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12.0),
-
-                  // Ringkasan Status Pill Banner
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 10.0,
-                      horizontal: 14.0,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryTint,
-                      borderRadius: BorderRadius.circular(14.0),
-                      border: Border.all(
-                        color: AppColors.borderBlueTint,
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.assignment_late_outlined,
-                                size: 16.0,
-                                color: AppColors.primaryNavy,
-                              ),
-                              const SizedBox(width: 8.0),
-                              Expanded(
-                                child: Text(
-                                  '${_cases.length} Catatan Kasus Tercatat',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.metaSemibold12.copyWith(
-                                    color: AppColors.primaryNavy,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Text(
-                          '$activeCount Proses • $completedCount Selesai',
-                          style: AppTextStyles.captionSemibold11.copyWith(
-                            color: AppColors.primaryNavy,
                           ),
                         ),
                       ],

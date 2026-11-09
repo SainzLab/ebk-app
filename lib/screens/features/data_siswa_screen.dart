@@ -6,6 +6,7 @@ import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/student_card.dart';
 import '../../widgets/toast_notification.dart';
+import '../dashboard/profil_view.dart';
 import '../states/delete_dialog.dart';
 
 enum StudentSortOption {
@@ -74,14 +75,19 @@ class StudentDataModel {
 /// Mendukung fitur CRUD lengkap (melihat detail, menambah, mengedit, menghapus)
 /// dan Filter & Urutkan interaktif (kelas spesifik, jenis kelamin, dan urutan sorting)
 /// sesuai `06-data-siswa-srs-f-003.png` dan `ebk_design.json`.
+/// Untuk role Kepala Sekolah, menu dibatasi hanya untuk melihat (read-only).
 class DataSiswaScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<CaseRecordModel?>? onOpenDetail;
+  final bool isReadOnly;
+  final ProfilRole? role;
 
   const DataSiswaScreen({
     super.key,
     this.onBack,
     this.onOpenDetail,
+    this.isReadOnly = false,
+    this.role,
   });
 
   @override
@@ -89,6 +95,25 @@ class DataSiswaScreen extends StatefulWidget {
 }
 
 class _DataSiswaScreenState extends State<DataSiswaScreen> {
+  bool get _isReadOnly {
+    if (widget.isReadOnly || widget.role == ProfilRole.kepalaSekolah) {
+      return true;
+    }
+    final routeArgs = ModalRoute.of(context)?.settings.arguments;
+    if (routeArgs is Map<String, dynamic>) {
+      if (routeArgs['isReadOnly'] == true ||
+          routeArgs['role'] == ProfilRole.kepalaSekolah ||
+          routeArgs['role'] == 'kepsek' ||
+          routeArgs['role'] == 'kepala_sekolah') {
+        return true;
+      }
+    } else if (routeArgs is ProfilRole &&
+        routeArgs == ProfilRole.kepalaSekolah) {
+      return true;
+    }
+    return false;
+  }
+
   final TextEditingController _searchController = TextEditingController();
   String _selectedGradeFilter = 'Semua';
   String? _selectedSpecificClass;
@@ -601,6 +626,15 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
   }
 
   Future<void> _confirmDeleteStudent(StudentDataModel student) async {
+    if (_isReadOnly) {
+      ToastNotification.show(
+        context,
+        message:
+            'Akses ditolak: Kepala Sekolah hanya memiliki izin melihat data siswa.',
+        type: ToastType.error,
+      );
+      return;
+    }
     final confirmed = await DeleteDialog.show(
       context,
       title: 'Hapus Data Siswa?',
@@ -787,10 +821,27 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                 GestureDetector(
                   onTap: () {
                     Navigator.of(sheetContext).pop();
+                    final matchedCase = CaseRecordModel.defaultCases.firstWhere(
+                      (c) =>
+                          c.studentNisn == student.nisn ||
+                          c.studentName == student.name,
+                      orElse: () => CaseRecordModel.defaultCases.first,
+                    );
                     if (widget.onOpenDetail != null) {
-                      widget.onOpenDetail!(null);
+                      widget.onOpenDetail!(matchedCase);
                     } else {
-                      Navigator.pushNamed(context, '/detail-kasus');
+                      Navigator.pushNamed(
+                        context,
+                        '/detail-kasus',
+                        arguments: {
+                          'caseData': matchedCase,
+                          'role': widget.role ??
+                              (_isReadOnly
+                                  ? ProfilRole.kepalaSekolah
+                                  : ProfilRole.guruBk),
+                          'isReadOnly': _isReadOnly,
+                        },
+                      );
                     }
                   },
                   child: Container(
@@ -830,37 +881,46 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                   ),
                 ),
                 const SizedBox(height: 16.0),
-                // Tombol Aksi Edit & Hapus Data Siswa
-                Row(
-                  children: [
-                    Expanded(
-                      child: CustomButton.secondary(
-                        label: 'Edit Data',
-                        height: 48.0,
-                        borderRadius: 12.0,
-                        leadingIcon: Icons.edit_outlined,
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          _showStudentFormSheet(existingStudent: student);
-                        },
+                // Tombol Aksi: Edit & Hapus (Guru BK) atau Tutup (Kepala Sekolah)
+                if (!_isReadOnly)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomButton.secondary(
+                          label: 'Edit Data',
+                          height: 48.0,
+                          borderRadius: 12.0,
+                          leadingIcon: Icons.edit_outlined,
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _showStudentFormSheet(existingStudent: student);
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10.0),
-                    Expanded(
-                      child: CustomButton(
-                        label: 'Hapus Siswa',
-                        variant: CustomButtonVariant.danger,
-                        height: 48.0,
-                        borderRadius: 12.0,
-                        leadingIcon: Icons.delete_outline_rounded,
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          _confirmDeleteStudent(student);
-                        },
+                      const SizedBox(width: 10.0),
+                      Expanded(
+                        child: CustomButton(
+                          label: 'Hapus Siswa',
+                          variant: CustomButtonVariant.danger,
+                          height: 48.0,
+                          borderRadius: 12.0,
+                          leadingIcon: Icons.delete_outline_rounded,
+                          onPressed: () {
+                            Navigator.of(sheetContext).pop();
+                            _confirmDeleteStudent(student);
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  )
+                else
+                  CustomButton.secondary(
+                    label: 'Tutup Detail Siswa',
+                    height: 48.0,
+                    borderRadius: 12.0,
+                    leadingIcon: Icons.close_rounded,
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                  ),
               ],
             ),
           ),
@@ -870,6 +930,15 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
   }
 
   void _showStudentFormSheet({StudentDataModel? existingStudent}) {
+    if (_isReadOnly) {
+      ToastNotification.show(
+        context,
+        message:
+            'Akses ditolak: Kepala Sekolah hanya memiliki izin melihat data siswa.',
+        type: ToastType.error,
+      );
+      return;
+    }
     final bool isEditing = existingStudent != null;
     final nameController = TextEditingController(
       text: existingStudent?.name ?? '',
@@ -1649,7 +1718,9 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                             ),
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.only(bottom: 76.0),
+                            padding: EdgeInsets.only(
+                              bottom: _isReadOnly ? 24.0 : 76.0,
+                            ),
                             itemCount: students.length,
                             separatorBuilder: (_, __) =>
                                 const SizedBox(height: 10.0),
@@ -1660,8 +1731,9 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                 nisn: student.nisn,
                                 className: student.className,
                                 onTap: () => _showStudentDetailSheet(student),
-                                onLongPress: () =>
-                                    _confirmDeleteStudent(student),
+                                onLongPress: _isReadOnly
+                                    ? null
+                                    : () => _confirmDeleteStudent(student),
                               );
                             },
                           ),
@@ -1681,34 +1753,35 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
               ),
             ),
             // FAB Tambah Siswa (+) (58x58, r=18, fill=#1B3B7B)
-            Positioned(
-              right: 20.0,
-              bottom: 28.0,
-              child: GestureDetector(
-                onTap: () => _showStudentFormSheet(),
-                child: Container(
-                  width: 58.0,
-                  height: 58.0,
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryNavy,
-                    borderRadius: BorderRadius.circular(18.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primaryNavy.withValues(alpha: 0.32),
-                        offset: const Offset(0, 8),
-                        blurRadius: 20.0,
-                      ),
-                    ],
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.add_rounded,
-                    size: 26.0,
-                    color: AppColors.pureWhite,
+            if (!_isReadOnly)
+              Positioned(
+                right: 20.0,
+                bottom: 28.0,
+                child: GestureDetector(
+                  onTap: () => _showStudentFormSheet(),
+                  child: Container(
+                    width: 58.0,
+                    height: 58.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryNavy,
+                      borderRadius: BorderRadius.circular(18.0),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryNavy.withValues(alpha: 0.32),
+                          offset: const Offset(0, 8),
+                          blurRadius: 20.0,
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.add_rounded,
+                      size: 26.0,
+                      color: AppColors.pureWhite,
+                    ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

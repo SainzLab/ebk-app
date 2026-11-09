@@ -90,6 +90,8 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
             DetailKasusScreen(
               key: ValueKey(_selectedCase.id),
               caseData: _selectedCase,
+              role: ProfilRole.orangTua,
+              isReadOnly: true,
               onBack: () => setState(() => _selectedNavIndex = 0),
             ),
             AjukanKonsultasiScreen(

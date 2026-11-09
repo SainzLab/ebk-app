@@ -4,22 +4,29 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/toast_notification.dart';
+import '../dashboard/profil_view.dart';
 import '../states/delete_dialog.dart';
 import 'tambah_kasus_screen.dart';
 
 /// Halaman Detail Kasus Pelanggaran Siswa (`10 • Detail Kasus (SRS-F-008 & 009)`)
 /// Menampilkan rincian jenis kasus (membolos, tawuran, dll), waktu, tempat,
 /// kronologi, penanganan Guru BK, serta aksi Edit dan Ubah Status.
+/// Untuk role Kepala Sekolah, menu dibatasi hanya untuk melihat (read-only)
+/// tanpa aksi edit, hapus, maupun menandai selesai.
 class DetailKasusScreen extends StatefulWidget {
   final CaseRecordModel? caseData;
   final VoidCallback? onBack;
   final ValueChanged<CaseRecordModel>? onOpenEdit;
+  final bool isReadOnly;
+  final ProfilRole? role;
 
   const DetailKasusScreen({
     super.key,
     this.caseData,
     this.onBack,
     this.onOpenEdit,
+    this.isReadOnly = false,
+    this.role,
   });
 
   @override
@@ -29,10 +36,49 @@ class DetailKasusScreen extends StatefulWidget {
 class _DetailKasusScreenState extends State<DetailKasusScreen> {
   late CaseRecordModel _currentCase;
 
+  bool get _isReadOnly {
+    if (widget.isReadOnly ||
+        widget.role == ProfilRole.kepalaSekolah ||
+        widget.role == ProfilRole.orangTua) {
+      return true;
+    }
+    final routeArgs = ModalRoute.of(context)?.settings.arguments;
+    if (routeArgs is Map<String, dynamic>) {
+      if (routeArgs['isReadOnly'] == true ||
+          routeArgs['role'] == ProfilRole.kepalaSekolah ||
+          routeArgs['role'] == ProfilRole.orangTua ||
+          routeArgs['role'] == 'kepsek' ||
+          routeArgs['role'] == 'kepala_sekolah' ||
+          routeArgs['role'] == 'ortu' ||
+          routeArgs['role'] == 'orang_tua') {
+        return true;
+      }
+    } else if (routeArgs is ProfilRole &&
+        (routeArgs == ProfilRole.kepalaSekolah ||
+            routeArgs == ProfilRole.orangTua)) {
+      return true;
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
     _currentCase = widget.caseData ?? CaseRecordModel.defaultCases.first;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (widget.caseData == null) {
+      final routeArgs = ModalRoute.of(context)?.settings.arguments;
+      if (routeArgs is Map<String, dynamic> &&
+          routeArgs['caseData'] is CaseRecordModel) {
+        _currentCase = routeArgs['caseData'] as CaseRecordModel;
+      } else if (routeArgs is CaseRecordModel) {
+        _currentCase = routeArgs;
+      }
+    }
   }
 
   @override
@@ -44,6 +90,15 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
   }
 
   void _handleEditCase() async {
+    if (_isReadOnly) {
+      ToastNotification.show(
+        context,
+        message:
+            'Akses ditolak: Kepala Sekolah hanya memiliki izin melihat riwayat kasus.',
+        type: ToastType.error,
+      );
+      return;
+    }
     if (widget.onOpenEdit != null) {
       widget.onOpenEdit!(_currentCase);
       return;
@@ -68,6 +123,15 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
   }
 
   void _toggleStatus() {
+    if (_isReadOnly) {
+      ToastNotification.show(
+        context,
+        message:
+            'Akses ditolak: Kepala Sekolah hanya memiliki izin melihat riwayat kasus.',
+        type: ToastType.error,
+      );
+      return;
+    }
     setState(() {
       _currentCase = _currentCase.copyWith(
         isCompleted: !_currentCase.isCompleted,
@@ -83,6 +147,15 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
   }
 
   Future<void> _handleDelete() async {
+    if (_isReadOnly) {
+      ToastNotification.show(
+        context,
+        message:
+            'Akses ditolak: Kepala Sekolah hanya memiliki izin melihat riwayat kasus.',
+        type: ToastType.error,
+      );
+      return;
+    }
     final confirmed = await DeleteDialog.show(
       context,
       title: 'Hapus Catatan Kasus?',
@@ -472,46 +545,62 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
                           ),
                           const SizedBox(height: 16.0),
 
-                          // Tombol Aksi Lengkap
-                          Row(
-                            children: [
-                              Expanded(
-                                child: CustomButton.secondary(
-                                  label: 'Edit Kasus',
-                                  leadingIcon: Icons.edit_outlined,
-                                  height: 48.0,
-                                  borderRadius: 12.0,
-                                  onPressed: _handleEditCase,
+                          // Tombol Aksi: Read-Only (Kepala Sekolah) vs Aksi Lengkap (Guru BK)
+                          if (_isReadOnly) ...[
+                            CustomButton.secondary(
+                              label: 'Kembali',
+                              leadingIcon: Icons.arrow_back_rounded,
+                              height: 48.0,
+                              borderRadius: 12.0,
+                              onPressed: () {
+                                if (widget.onBack != null) {
+                                  widget.onBack!();
+                                } else {
+                                  Navigator.pop(context, _currentCase);
+                                }
+                              },
+                            ),
+                          ] else ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: CustomButton.secondary(
+                                    label: 'Edit Kasus',
+                                    leadingIcon: Icons.edit_outlined,
+                                    height: 48.0,
+                                    borderRadius: 12.0,
+                                    onPressed: _handleEditCase,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10.0),
-                              Expanded(
-                                child: CustomButton(
-                                  label: isCompleted
-                                      ? 'Buka Kembali'
-                                      : 'Tandai Selesai',
-                                  variant: isCompleted
-                                      ? CustomButtonVariant.outlineNeutral
-                                      : CustomButtonVariant.primary,
-                                  leadingIcon: isCompleted
-                                      ? Icons.refresh_rounded
-                                      : Icons.check_circle_outline_rounded,
-                                  height: 48.0,
-                                  borderRadius: 12.0,
-                                  onPressed: _toggleStatus,
+                                const SizedBox(width: 10.0),
+                                Expanded(
+                                  child: CustomButton(
+                                    label: isCompleted
+                                        ? 'Buka Kembali'
+                                        : 'Tandai Selesai',
+                                    variant: isCompleted
+                                        ? CustomButtonVariant.outlineNeutral
+                                        : CustomButtonVariant.primary,
+                                    leadingIcon: isCompleted
+                                        ? Icons.refresh_rounded
+                                        : Icons.check_circle_outline_rounded,
+                                    height: 48.0,
+                                    borderRadius: 12.0,
+                                    onPressed: _toggleStatus,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10.0),
-                          CustomButton(
-                            label: 'Hapus Catatan Kasus',
-                            variant: CustomButtonVariant.danger,
-                            leadingIcon: Icons.delete_outline_rounded,
-                            height: 46.0,
-                            borderRadius: 12.0,
-                            onPressed: _handleDelete,
-                          ),
+                              ],
+                            ),
+                            const SizedBox(height: 10.0),
+                            CustomButton(
+                              label: 'Hapus Catatan Kasus',
+                              variant: CustomButtonVariant.danger,
+                              leadingIcon: Icons.delete_outline_rounded,
+                              height: 46.0,
+                              borderRadius: 12.0,
+                              onPressed: _handleDelete,
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 20.0),

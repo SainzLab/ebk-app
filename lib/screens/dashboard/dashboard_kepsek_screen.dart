@@ -71,6 +71,8 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
               onBack: () => setState(() => _selectedNavIndex = 0),
             ),
             DataSiswaScreen(
+              role: ProfilRole.kepalaSekolah,
+              isReadOnly: true,
               onBack: () => setState(() => _selectedNavIndex = 0),
             ),
             ProfilView(
