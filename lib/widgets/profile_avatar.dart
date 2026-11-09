@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../core/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 
@@ -37,6 +39,51 @@ class ProfileAvatar extends StatelessWidget {
     this.onEditPressed,
     this.onTap,
   });
+
+  /// Widget pembungkus untuk merender avatar pengguna yang sedang login secara otomatis
+  /// dan selalu reaktif terhadap perubahan foto profil di [AuthService].
+  static Widget currentUser({
+    Key? key,
+    double size = 44.0,
+    IconData? fallbackIcon = Icons.person_outline_rounded,
+    String? fallbackInitials,
+    Color? backgroundColor,
+    Color? borderColor,
+    double borderWidth = 1.5,
+    bool showEditBadge = false,
+    VoidCallback? onEditPressed,
+    VoidCallback? onTap,
+  }) {
+    return ListenableBuilder(
+      listenable: AuthService.instance,
+      builder: (context, _) {
+        ImageProvider? userImage;
+        final localPath = AuthService.instance.localAvatarPath;
+        if (localPath != null && localPath.isNotEmpty) {
+          final file = File(localPath);
+          if (file.existsSync()) {
+            userImage = FileImage(file);
+          }
+        }
+        final remoteUrl = AuthService.instance.currentUserAvatarUrl;
+
+        return ProfileAvatar(
+          key: key,
+          size: size,
+          image: userImage,
+          imageUrl: userImage == null ? remoteUrl : null,
+          fallbackIcon: fallbackIcon,
+          fallbackInitials: fallbackInitials,
+          backgroundColor: backgroundColor,
+          borderColor: borderColor,
+          borderWidth: borderWidth,
+          showEditBadge: showEditBadge,
+          onEditPressed: onEditPressed,
+          onTap: onTap,
+        );
+      },
+    );
+  }
 
   Widget _buildFallbackContent() {
     if (fallbackInitials != null && fallbackInitials!.trim().isNotEmpty) {

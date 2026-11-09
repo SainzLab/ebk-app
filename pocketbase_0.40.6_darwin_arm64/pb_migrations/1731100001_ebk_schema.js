@@ -33,6 +33,9 @@ migrate((app) => {
   users.fields.add(new BoolField({
     name: "notify_email",
   }));
+  users.fields.add(new BoolField({
+    name: "notify_system",
+  }));
 
   users.passwordAuth.enabled = true;
   users.passwordAuth.identityFields = ["email", "username"];

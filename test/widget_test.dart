@@ -527,7 +527,7 @@ void main() {
 
     // 1. Verify Guru BK can see all 3 action buttons
     expect(find.text('Edit Kasus'), findsOneWidget);
-    expect(find.text('Tandai Selesai'), findsOneWidget);
+    expect(find.text('Selesai'), findsOneWidget);
     expect(find.text('Hapus Catatan Kasus'), findsOneWidget);
 
     // 2. Read-only banner and badge MUST NOT be present
@@ -593,7 +593,7 @@ void main() {
 
     // 1. Initial display shows November 2026
     expect(find.text('November 2026'), findsOneWidget);
-    expect(find.text('Lihat Semua Hari'), findsOneWidget);
+    expect(find.text('Semua Hari'), findsOneWidget);
 
     // 2. Test week navigation (Minggu Berikutnya)
     final nextWeekButton = find.byTooltip('Minggu Berikutnya');
@@ -619,15 +619,94 @@ void main() {
     // Verify month updated to Desember 2026
     expect(find.text('Desember 2026'), findsOneWidget);
 
-    // 4. Test "Lihat Semua Hari" toggle
-    await tester.tap(find.text('Lihat Semua Hari'));
+    // 4. Test "Semua Hari" toggle
+    await tester.tap(find.text('Semua Hari'));
     await tester.pumpAndSettle();
     expect(find.text('Semua Hari'), findsWidgets);
-    expect(find.text('Filter Hari Ini'), findsOneWidget);
+    expect(find.text('Hari Ini'), findsOneWidget);
 
-    // Toggle back to Filter Hari Ini
-    await tester.tap(find.text('Filter Hari Ini'));
+    // Toggle back to Hari Ini
+    await tester.tap(find.text('Hari Ini'));
     await tester.pumpAndSettle();
-    expect(find.text('Lihat Semua Hari'), findsOneWidget);
+    expect(find.text('Semua Hari'), findsOneWidget);
+  });
+
+  testWidgets(
+      'CatatKonsultasiScreen uses studentClass instead of item.id and allows Guru BK to delete',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CatatKonsultasiScreen(
+            role: ProfilRole.guruBk,
+            isReadOnly: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Verify badge does NOT show raw ID "KOP-01" as a badge, but shows studentClass "Kelas IX-B"
+    expect(find.text('KOP-01'), findsNothing);
+    expect(find.text('Kelas IX-B'), findsWidgets);
+
+    // 2. Verify Delete icon button is present for Guru BK
+    final deleteButtons = find.byIcon(Icons.delete_outline_rounded);
+    expect(deleteButtons, findsWidgets);
+
+    // 3. Tap delete button on the first card
+    await tester.tap(deleteButtons.first);
+    await tester.pumpAndSettle();
+
+    // Verify DeleteDialog is displayed with parent and student info (no item.id)
+    expect(find.text('Hapus Catatan Konsultasi?'), findsOneWidget);
+    expect(
+      find.text(
+          'Apakah Anda yakin ingin menghapus catatan konsultasi bersama Bapak Hendra Pratama (Wali dari Rizky Pratama) secara permanen?'),
+      findsOneWidget,
+    );
+
+    // Cancel deletion
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hapus Catatan Konsultasi?'), findsNothing);
+    expect(find.text('Bapak Hendra Pratama'), findsOneWidget);
+
+    // Tap delete and confirm
+    await tester.tap(deleteButtons.first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hapus'));
+    await tester.pumpAndSettle();
+
+    // Verify item is removed and toast is displayed
+    expect(find.text('Bapak Hendra Pratama'), findsNothing);
+    expect(
+      find.text(
+          'Berhasil: Catatan konsultasi bersama Bapak Hendra Pratama telah dihapus.'),
+      findsOneWidget,
+    );
+
+    // 4. Test read-only mode for Kepala Sekolah
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: CatatKonsultasiScreen(
+            role: ProfilRole.kepalaSekolah,
+            isReadOnly: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify Delete buttons and FAB are NOT present in read-only mode
+    expect(find.byIcon(Icons.delete_outline_rounded), findsNothing);
+    expect(find.byIcon(Icons.add_rounded), findsNothing);
+    expect(find.text('Edit Catatan'), findsNothing);
   });
 }

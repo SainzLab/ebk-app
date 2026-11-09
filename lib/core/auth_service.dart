@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:pocketbase/pocketbase.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../screens/dashboard/profil_view.dart';
 import 'app_exception.dart';
 import 'pb_client.dart';
@@ -42,6 +44,95 @@ class AuthService extends ChangeNotifier {
 
   bool get currentUserNotifyEmail =>
       currentUser?.getBoolValue('notify_email') ?? true;
+
+  bool get currentUserNotifySystem =>
+      currentUser?.getBoolValue('notify_system') ?? true;
+
+  String? _localAvatarPath;
+  String? get localAvatarPath => _localAvatarPath;
+
+  String? get currentUserAvatarUrl {
+    final record = currentUser;
+    if (record == null) return null;
+    final avatarName = record.getStringValue('avatar');
+    if (avatarName.isNotEmpty) {
+      return _pb.files.getUrl(record, avatarName).toString();
+    }
+    return null;
+  }
+
+  Future<void> loadLocalAvatar() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key =
+          'ebk_avatar_${currentUserId.isNotEmpty ? currentUserId : currentRole.name}';
+      final path = prefs.getString(key);
+      if (path != null && path.isNotEmpty) {
+        _localAvatarPath = path;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setLocalAvatarPath(String? path) async {
+    _localAvatarPath = path;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key =
+          'ebk_avatar_${currentUserId.isNotEmpty ? currentUserId : currentRole.name}';
+      if (path != null && path.isNotEmpty) {
+        await prefs.setString(key, path);
+      } else {
+        await prefs.remove(key);
+      }
+    } catch (_) {}
+    notifyListeners();
+  }
+
+  Future<String?> uploadAvatar({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final user = currentUser;
+    if (user != null) {
+      try {
+        final multipartFile = http.MultipartFile.fromBytes(
+          'avatar',
+          bytes,
+          filename: filename,
+        );
+        final updated = await _pb.collection('users').update(
+          user.id,
+          files: [multipartFile],
+        );
+        _pb.authStore.save(_pb.authStore.token, updated);
+        notifyListeners();
+        final newAvatar = updated.getStringValue('avatar');
+        if (newAvatar.isNotEmpty) {
+          return _pb.files.getUrl(updated, newAvatar).toString();
+        }
+      } catch (e) {
+        debugPrint('Upload avatar error: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<void> deleteAvatar() async {
+    final user = currentUser;
+    if (user != null) {
+      try {
+        final updated = await _pb.collection('users').update(
+          user.id,
+          body: {'avatar': null},
+        );
+        _pb.authStore.save(_pb.authStore.token, updated);
+      } catch (e) {
+        debugPrint('Delete avatar error: $e');
+      }
+    }
+    await setLocalAvatarPath(null);
+  }
 
   ProfilRole get currentRole {
     final roleStr = currentUser?.getStringValue('role') ?? '';
@@ -101,6 +192,7 @@ class AuthService extends ChangeNotifier {
         );
       }
 
+      await loadLocalAvatar();
       notifyListeners();
       return currentRole;
     } catch (e) {
@@ -110,6 +202,7 @@ class AuthService extends ChangeNotifier {
 
   /// Refresh sesi jika token masih ada saat aplikasi dibuka.
   Future<bool> tryRefreshSession() async {
+    await loadLocalAvatar();
     if (!isLoggedIn) return false;
     try {
       await _pb.collection('users').authRefresh();
@@ -134,6 +227,7 @@ class AuthService extends ChangeNotifier {
     String? nip,
     String? position,
     bool? notifyEmail,
+    bool? notifySystem,
   }) async {
     final user = currentUser;
     if (user == null) {
@@ -149,6 +243,7 @@ class AuthService extends ChangeNotifier {
         if (nip != null) 'nip': nip.trim(),
         if (position != null) 'position': position.trim(),
         if (notifyEmail != null) 'notify_email': notifyEmail,
+        if (notifySystem != null) 'notify_system': notifySystem,
       };
       final updated = await _pb
           .collection('users')
@@ -190,6 +285,7 @@ class AuthService extends ChangeNotifier {
 
   /// Logout dan bersihkan token dari penyimpanan lokal.
   Future<void> logout() async {
+    _localAvatarPath = null;
     _pb.authStore.clear();
     notifyListeners();
   }

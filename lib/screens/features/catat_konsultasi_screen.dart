@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/auth_service.dart';
 import '../../models/parent_consultation_model.dart';
 import '../../repositories/parent_consultation_repository.dart';
 import '../../theme/app_colors.dart';
@@ -6,6 +7,8 @@ import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/toast_notification.dart';
+import '../dashboard/profil_view.dart';
+import '../states/delete_dialog.dart';
 
 /// Halaman Kelola Catatan & Riwayat Konsultasi Orang Tua (`09 • Konsultasi Orang Tua (SRS-F-006)`)
 /// Berdasarkan spesifikasi `09-catat-konsultasi-ortu-srs-f-006.png` dan `ebk_design.json`.
@@ -14,12 +17,17 @@ import '../../widgets/toast_notification.dart';
 /// 2. Menambah catatan konsultasi baru (Wali, Siswa, Waktu, Metode, Hasil Diskusi, Tindak Lanjut).
 /// 3. Mengedit catatan konsultasi & memperbarui status (Dalam Proses / Selesai) tanpa dot.
 /// 4. Fitur pencarian dan filter aktif (Metode, Status, Kelas, Urutan, dan Quick Chips).
+/// 5. Menghapus catatan konsultasi bagi role Guru BK.
 class CatatKonsultasiScreen extends StatefulWidget {
   final VoidCallback? onBack;
+  final bool isReadOnly;
+  final ProfilRole? role;
 
   const CatatKonsultasiScreen({
     super.key,
     this.onBack,
+    this.isReadOnly = false,
+    this.role,
   });
 
   @override
@@ -28,6 +36,23 @@ class CatatKonsultasiScreen extends StatefulWidget {
 
 class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
   late List<ParentConsultationModel> _consultations;
+
+  bool get _isReadOnly {
+    if (widget.isReadOnly || widget.role == ProfilRole.kepalaSekolah) {
+      return true;
+    }
+    final routeArgs = ModalRoute.of(context)?.settings.arguments;
+    if (routeArgs is Map<String, dynamic>) {
+      if (routeArgs['isReadOnly'] == true ||
+          routeArgs['role'] == ProfilRole.kepalaSekolah) {
+        return true;
+      }
+    } else if (routeArgs is ProfilRole &&
+        routeArgs == ProfilRole.kepalaSekolah) {
+      return true;
+    }
+    return AuthService.instance.currentRole == ProfilRole.kepalaSekolah;
+  }
 
   // Controller Pencarian
   final TextEditingController _searchController = TextEditingController();
@@ -215,10 +240,41 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     ToastNotification.show(
       context,
       message: newStatus
-          ? 'Konsultasi ${item.id} (${item.parentName}) diselesaikan.'
-          : 'Status konsultasi ${item.id} dibuka kembali (Dalam Proses).',
+          ? 'Konsultasi bersama ${item.parentName} (${item.studentName}) diselesaikan.'
+          : 'Status konsultasi bersama ${item.parentName} dibuka kembali (Dalam Proses).',
       type: ToastType.success,
     );
+  }
+
+  // Aksi Hapus Catatan Konsultasi dengan Modal Konfirmasi DeleteDialog
+  Future<void> _deleteConsultation(ParentConsultationModel item) async {
+    final confirmed = await DeleteDialog.show(
+      context,
+      title: 'Hapus Catatan Konsultasi?',
+      message:
+          'Apakah Anda yakin ingin menghapus catatan konsultasi bersama ${item.parentName} (Wali dari ${item.studentName}) secara permanen?',
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        if (!item.id.startsWith('KOP-')) {
+          await ParentConsultationRepository.instance
+              .deleteConsultation(item.id);
+        }
+      } catch (_) {}
+
+      setState(() {
+        _consultations.removeWhere((c) => c.id == item.id);
+      });
+
+      if (!mounted) return;
+      ToastNotification.show(
+        context,
+        message:
+            'Berhasil: Catatan konsultasi bersama ${item.parentName} telah dihapus.',
+        type: ToastType.success,
+      );
+    }
   }
 
   // Modal Bottom Sheet: Filter & Urutkan
@@ -507,7 +563,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
                     Text(
                       isEdit
-                          ? 'Edit Catatan Konsultasi (${editItem.id})'
+                          ? 'Edit Catatan Konsultasi • ${editItem.parentName}'
                           : 'Catat Konsultasi Orang Tua',
                       style: AppTextStyles.heading2,
                     ),
@@ -808,7 +864,8 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                         ToastNotification.show(
                           context,
                           message: isEdit
-                              ? 'Catatan konsultasi ${editItem.id} berhasil diperbarui.'
+                              // Perbaikan di sini: Menghilangkan ${editItem.id} dan menggantinya dengan nama Wali Murid
+                              ? 'Catatan konsultasi bersama ${editItem.parentName} berhasil diperbarui.' 
                               : 'Berhasil: Catatan konsultasi orang tua baru telah disimpan.',
                           type: ToastType.success,
                         );
@@ -874,7 +931,9 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                             borderRadius: BorderRadius.circular(8.0),
                           ),
                           child: Text(
-                            item.id,
+                            item.studentClass.isNotEmpty && item.studentClass != '-'
+                                ? item.studentClass
+                                : 'Konsultasi',
                             style: AppTextStyles.badgeBold10,
                           ),
                         ),
@@ -994,32 +1053,52 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                 const SizedBox(height: 20.0),
 
                 // Tombol Aksi
-                Row(
-                  children: [
-                    Expanded(
-                      child: CustomButton(
-                        label: 'Edit Catatan',
-                        variant: CustomButtonVariant.secondary,
-                        height: 44.0,
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showFormSheet(editItem: item);
-                        },
+                if (_isReadOnly)
+                  CustomButton(
+                    label: 'Tutup Detail Konsultasi',
+                    variant: CustomButtonVariant.outlineNeutral,
+                    height: 44.0,
+                    onPressed: () => Navigator.pop(ctx),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: CustomButton(
+                          label: 'Edit Catatan',
+                          variant: CustomButtonVariant.secondary,
+                          height: 44.0,
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showFormSheet(editItem: item);
+                          },
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 10.0),
-                    Expanded(
-                      child: CustomButton(
-                        label: item.isCompleted ? 'Buka Kembali' : 'Selesaikan',
-                        height: 44.0,
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _toggleStatus(item);
-                        },
+                      const SizedBox(width: 10.0),
+                      Expanded(
+                        child: CustomButton(
+                          label:
+                              item.isCompleted ? 'Buka Kembali' : 'Selesaikan',
+                          height: 44.0,
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _toggleStatus(item);
+                          },
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 10.0),
+                  CustomButton.danger(
+                    label: 'Hapus Catatan Konsultasi',
+                    leadingIcon: Icons.delete_outline_rounded,
+                    height: 44.0,
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _deleteConsultation(item);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -1383,6 +1462,9 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                               onTapDetail: () => _showDetailSheet(item),
                               onEdit: () => _showFormSheet(editItem: item),
                               onToggleStatus: () => _toggleStatus(item),
+                              onDelete: () => _deleteConsultation(item),
+                              canDelete: !_isReadOnly,
+                              isReadOnly: _isReadOnly,
                             );
                           },
                         ),
@@ -1393,9 +1475,10 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
             ),
 
             // FAB Tambah Catatan Konsultasi Orang Tua (+) (58x58, r=18, fill=#1B3B7B)
-            Positioned(
-              right: 20.0,
-              bottom: 28.0,
+            if (!_isReadOnly)
+              Positioned(
+                right: 20.0,
+                bottom: 28.0,
               child: GestureDetector(
                 onTap: () => _showFormSheet(),
                 child: Container(
@@ -1434,12 +1517,18 @@ class _ConsultationCardItem extends StatelessWidget {
   final VoidCallback onTapDetail;
   final VoidCallback onEdit;
   final VoidCallback onToggleStatus;
+  final VoidCallback? onDelete;
+  final bool canDelete;
+  final bool isReadOnly;
 
   const _ConsultationCardItem({
     required this.item,
     required this.onTapDetail,
     required this.onEdit,
     required this.onToggleStatus,
+    this.onDelete,
+    this.canDelete = true,
+    this.isReadOnly = false,
   });
 
   IconData get _methodIcon {
@@ -1474,6 +1563,7 @@ class _ConsultationCardItem extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTapDetail,
+          onLongPress: canDelete && onDelete != null ? onDelete : null,
           borderRadius: BorderRadius.circular(20.0),
           child: Padding(
             padding: const EdgeInsets.all(15.0),
@@ -1498,7 +1588,10 @@ class _ConsultationCardItem extends StatelessWidget {
                               borderRadius: BorderRadius.circular(6.0),
                             ),
                             child: Text(
-                              item.id,
+                              item.studentClass.isNotEmpty &&
+                                      item.studentClass != '-'
+                                  ? item.studentClass
+                                  : 'Konsultasi',
                               style: AppTextStyles.badgeBold10,
                             ),
                           ),
@@ -1673,108 +1766,110 @@ class _ConsultationCardItem extends StatelessWidget {
                 const SizedBox(height: 12.0),
 
                 // Action Buttons Row (gap: 8.0)
-                Row(
-                  children: [
-                    // Tombol 1: Edit Catatan
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: onEdit,
-                        child: Container(
-                          height: 32.0,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 6.0,
-                            horizontal: 8.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.pureWhite,
-                            borderRadius: BorderRadius.circular(10.0),
-                            border: Border.all(
-                              color: AppColors.borderNeutral,
-                              width: 1.0,
+                if (!isReadOnly) ...[
+                  Row(
+                    children: [
+                      // Tombol 1: Edit Catatan
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: onEdit,
+                          child: Container(
+                            height: 32.0,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6.0,
+                              horizontal: 8.0,
                             ),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.edit_note_rounded,
-                                size: 15.0,
-                                color: AppColors.primaryNavy,
+                            decoration: BoxDecoration(
+                              color: AppColors.pureWhite,
+                              borderRadius: BorderRadius.circular(10.0),
+                              border: Border.all(
+                                color: AppColors.borderNeutral,
+                                width: 1.0,
                               ),
-                              SizedBox(width: 4.0),
-                              Text(
-                                'Edit Catatan',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontFamily,
-                                  fontSize: 11.0,
-                                  fontWeight: FontWeight.w600,
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.edit_note_rounded,
+                                  size: 15.0,
                                   color: AppColors.primaryNavy,
                                 ),
-                              ),
-                            ],
+                                SizedBox(width: 4.0),
+                                Text(
+                                  'Edit Catatan',
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 11.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.primaryNavy,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8.0),
+                      const SizedBox(width: 8.0),
 
-                    // Tombol 2: Selesaikan / Buka Kembali (Toggle Status)
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: onToggleStatus,
-                        child: Container(
-                          height: 32.0,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 6.0,
-                            horizontal: 8.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: item.isCompleted
-                                ? AppColors.canvasLightGray
-                                : AppColors.primaryNavy,
-                            borderRadius: BorderRadius.circular(10.0),
-                            border: item.isCompleted
-                                ? Border.all(
-                                    color: AppColors.borderNeutral,
-                                    width: 1.0,
-                                  )
-                                : null,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                item.isCompleted
-                                    ? Icons.refresh_rounded
-                                    : Icons.check_rounded,
-                                size: 14.0,
-                                color: item.isCompleted
-                                    ? AppColors.textSecondary
-                                    : AppColors.pureWhite,
-                              ),
-                              const SizedBox(width: 4.0),
-                              Text(
-                                item.isCompleted
-                                    ? 'Buka Kembali'
-                                    : 'Selesaikan',
-                                style: TextStyle(
-                                  fontFamily: AppTextStyles.fontFamily,
-                                  fontSize: 11.0,
-                                  fontWeight: FontWeight.w700,
+                      // Tombol 2: Selesaikan / Buka Kembali (Toggle Status)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: onToggleStatus,
+                          child: Container(
+                            height: 32.0,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6.0,
+                              horizontal: 8.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: item.isCompleted
+                                  ? AppColors.canvasLightGray
+                                  : AppColors.primaryNavy,
+                              borderRadius: BorderRadius.circular(10.0),
+                              border: item.isCompleted
+                                  ? Border.all(
+                                      color: AppColors.borderNeutral,
+                                      width: 1.0,
+                                    )
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  item.isCompleted
+                                      ? Icons.refresh_rounded
+                                      : Icons.check_rounded,
+                                  size: 14.0,
                                   color: item.isCompleted
                                       ? AppColors.textSecondary
                                       : AppColors.pureWhite,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4.0),
+                                Text(
+                                  item.isCompleted
+                                      ? 'Buka Kembali'
+                                      : 'Selesaikan',
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 11.0,
+                                    fontWeight: FontWeight.w700,
+                                    color: item.isCompleted
+                                        ? AppColors.textSecondary
+                                        : AppColors.pureWhite,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

@@ -136,7 +136,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          ProfileAvatar(
+                          ProfileAvatar.currentUser(
                             size: 42.0,
                             fallbackIcon: Icons.person_outline_rounded,
                             onTap: () => setState(() => _selectedNavIndex = 3),

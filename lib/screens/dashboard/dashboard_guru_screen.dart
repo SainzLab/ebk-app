@@ -269,7 +269,7 @@ class _DashboardGuruScreenState extends State<DashboardGuruScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          ProfileAvatar(
+                          ProfileAvatar.currentUser(
                             size: 44.0,
                             fallbackIcon: Icons.person_outline_rounded,
                             onTap: () => setState(() => _selectedNavIndex = 3),

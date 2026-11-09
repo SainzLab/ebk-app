@@ -443,12 +443,56 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
     final passwordCtrl =
         TextEditingController(text: isEdit ? '••••••••' : '12345678');
 
-    Map<String, String> selectedStudent = _studentOptions.first;
+    final studentList = List<Map<String, String>>.from(
+      _studentOptions.isNotEmpty ? _studentOptions : _availableStudents,
+    );
+
+    // Deduplikasi daftar siswa agar tidak ada duplikasi item
+    final seenKeys = <String>{};
+    studentList.retainWhere((s) {
+      final key = '${s['nisn'] ?? ''}_${s['child'] ?? ''}';
+      return seenKeys.add(key);
+    });
+
+    Map<String, String> selectedStudent;
     if (isEdit) {
-      selectedStudent = _studentOptions.firstWhere(
-        (s) => editItem.studentChildName.startsWith(s['child']!),
-        orElse: () => _studentOptions.first,
+      final match = studentList.cast<Map<String, String>?>().firstWhere(
+        (s) =>
+            s != null &&
+            ((editItem.studentNisn.isNotEmpty &&
+                    editItem.studentNisn != '-' &&
+                    s['nisn'] == editItem.studentNisn) ||
+                editItem.studentChildName.startsWith(s['child'] ?? '')),
+        orElse: () => null,
       );
+
+      if (match != null) {
+        selectedStudent = match;
+      } else {
+        selectedStudent = {
+          'child': editItem.studentChildName,
+          'class': editItem.studentClass,
+          'nisn': editItem.studentNisn,
+        };
+        studentList.insert(0, selectedStudent);
+      }
+    } else {
+      selectedStudent = studentList.isNotEmpty
+          ? studentList.first
+          : {
+              'child': 'Siswa Belum Terdaftar',
+              'class': 'Kelas VII-A',
+              'nisn': '-',
+            };
+    }
+
+    String getStudentKey(Map<String, String> s) =>
+        '${s['nisn'] ?? ''}_${s['child'] ?? ''}';
+
+    String selectedStudentKey = getStudentKey(selectedStudent);
+
+    if (!studentList.any((s) => getStudentKey(s) == selectedStudentKey)) {
+      studentList.insert(0, selectedStudent);
     }
 
     bool isActiveStatus = isEdit ? editItem.isActive : true;
@@ -489,10 +533,19 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
 
                     Text(
                       isEdit
-                          ? 'Edit Akun Orang Tua (${editItem.id})'
-                          : 'Tambah Akun',
+                          ? 'Edit Akun ${editItem.fullName}'
+                          : 'Tambah Akun Orang Tua',
                       style: AppTextStyles.heading2,
                     ),
+                    if (isEdit) ...[
+                      const SizedBox(height: 4.0),
+                      Text(
+                        'Wali dari: ${editItem.studentChildName} (${editItem.studentClass})',
+                        style: AppTextStyles.subtitle11,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     const SizedBox(height: 14.0),
 
                     // 1. Nama Lengkap Wali Murid
@@ -520,25 +573,31 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                         ),
                       ),
                       child: DropdownButtonHideUnderline(
-                        child: DropdownButton<Map<String, String>>(
-                          value: selectedStudent,
+                        child: DropdownButton<String>(
+                          value: selectedStudentKey,
                           isExpanded: true,
                           icon: const Icon(
                             Icons.keyboard_arrow_down_rounded,
                             color: AppColors.primaryNavy,
                           ),
-                          items: _availableStudents.map((s) {
-                            return DropdownMenuItem<Map<String, String>>(
-                              value: s,
+                          items: studentList.map((s) {
+                            return DropdownMenuItem<String>(
+                              value: getStudentKey(s),
                               child: Text(
-                                '${s['child']} • ${s['class']} (${s['nisn']})',
+                                '${s['child'] ?? '-'} • ${s['class'] ?? '-'} (${s['nisn'] ?? '-'})',
                                 style: AppTextStyles.body,
                               ),
                             );
                           }).toList(),
                           onChanged: (val) {
                             if (val != null) {
-                              setModalState(() => selectedStudent = val);
+                              setModalState(() {
+                                selectedStudentKey = val;
+                                selectedStudent = studentList.firstWhere(
+                                  (s) => getStudentKey(s) == val,
+                                  orElse: () => selectedStudent,
+                                );
+                              });
                             }
                           },
                         ),
@@ -678,9 +737,9 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                               fullName: nameCtrl.text.trim(),
                               username: usernameCtrl.text.trim(),
                               emailOrPhone: contactCtrl.text.trim(),
-                              studentChildName: selectedStudent['child']!,
-                              studentClass: selectedStudent['class']!,
-                              studentNisn: selectedStudent['nisn']!,
+                              studentChildName: selectedStudent['child'] ?? '-',
+                              studentClass: selectedStudent['class'] ?? '-',
+                              studentNisn: selectedStudent['nisn'] ?? '-',
                               isActive: isActiveStatus,
                             );
                             final pwd = passwordCtrl.text.trim();
@@ -709,9 +768,9 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             fullName: nameCtrl.text.trim(),
                             username: usernameCtrl.text.trim(),
                             emailOrPhone: contactCtrl.text.trim(),
-                            studentChildName: selectedStudent['child']!,
-                            studentClass: selectedStudent['class']!,
-                            studentNisn: selectedStudent['nisn']!,
+                            studentChildName: selectedStudent['child'] ?? '-',
+                            studentClass: selectedStudent['class'] ?? '-',
+                            studentNisn: selectedStudent['nisn'] ?? '-',
                             isActive: isActiveStatus,
                             createdAt: 'Hari ini',
                           );
@@ -797,7 +856,9 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                         borderRadius: BorderRadius.circular(6.0),
                       ),
                       child: Text(
-                        user.id,
+                        user.studentClass.isNotEmpty && user.studentClass != '-'
+                            ? 'Wali ${user.studentClass}'
+                            : 'Wali Murid',
                         style: AppTextStyles.badgeBold10,
                       ),
                     ),

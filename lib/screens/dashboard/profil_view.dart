@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/auth_service.dart';
 import '../../models/student_model.dart';
 import '../../repositories/student_repository.dart';
@@ -37,12 +39,13 @@ class ProfilView extends StatefulWidget {
 class _ProfilViewState extends State<ProfilView> {
   bool _notifikasiAktif = true;
   bool _emailNotifikasi = true;
-  String? _profilePhotoUrl;
+  bool _isUploadingPhoto = false;
   List<StudentDataModel> _myChildren = const [];
 
   @override
   void initState() {
     super.initState();
+    _notifikasiAktif = AuthService.instance.currentUserNotifySystem;
     _emailNotifikasi = AuthService.instance.currentUserNotifyEmail;
     if (widget.role == ProfilRole.orangTua) {
       _loadMyChildren();
@@ -266,7 +269,75 @@ class _ProfilViewState extends State<ProfilView> {
     );
   }
 
+  Future<void> _pickAndUploadPhoto(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      final file = File(pickedFile.path);
+      if (!await file.exists()) return;
+
+      setState(() {
+        _isUploadingPhoto = true;
+      });
+
+      // Simpan path lokal agar segera tampil dan persisten
+      await AuthService.instance.setLocalAvatarPath(file.path);
+
+      // Coba upload file ke PocketBase di backend
+      final bytes = await pickedFile.readAsBytes();
+      await AuthService.instance.uploadAvatar(
+        bytes: bytes,
+        filename: pickedFile.name,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+        ToastNotification.show(
+          context,
+          message: source == ImageSource.camera
+              ? 'Foto profil berhasil diambil dari kamera dan diperbarui.'
+              : 'Foto profil berhasil dipilih dari galeri dan diperbarui.',
+          type: ToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingPhoto = false);
+        ToastNotification.show(
+          context,
+          message: 'Gagal memproses foto profil: $e',
+          type: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _deletePhoto() async {
+    await AuthService.instance.deleteAvatar();
+    if (mounted) {
+      ToastNotification.show(
+        context,
+        message: 'Foto profil dihapus, kembali ke avatar peran.',
+        type: ToastType.success,
+      );
+    }
+  }
+
   void _showPhotoPickerSheet() {
+    final hasPhoto = AuthService.instance.localAvatarPath != null ||
+        (AuthService.instance.currentUserAvatarUrl != null &&
+            AuthService.instance.currentUserAvatarUrl!.isNotEmpty);
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.pureWhite,
@@ -334,15 +405,7 @@ class _ProfilViewState extends State<ProfilView> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    setState(() {
-                      _profilePhotoUrl =
-                          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=256';
-                    });
-                    ToastNotification.show(
-                      context,
-                      message: 'Foto profil berhasil diperbarui dari kamera.',
-                      type: ToastType.success,
-                    );
+                    _pickAndUploadPhoto(ImageSource.camera);
                   },
                 ),
                 ListTile(
@@ -372,18 +435,10 @@ class _ProfilViewState extends State<ProfilView> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    setState(() {
-                      _profilePhotoUrl =
-                          'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=256';
-                    });
-                    ToastNotification.show(
-                      context,
-                      message: 'Foto profil berhasil dipilih dari galeri.',
-                      type: ToastType.success,
-                    );
+                    _pickAndUploadPhoto(ImageSource.gallery);
                   },
                 ),
-                if (_profilePhotoUrl != null)
+                if (hasPhoto)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
@@ -411,14 +466,7 @@ class _ProfilViewState extends State<ProfilView> {
                     ),
                     onTap: () {
                       Navigator.pop(ctx);
-                      setState(() {
-                        _profilePhotoUrl = null;
-                      });
-                      ToastNotification.show(
-                        context,
-                        message: 'Foto profil dihapus, kembali ke avatar peran.',
-                        type: ToastType.success,
-                      );
+                      _deletePhoto();
                     },
                   ),
               ],
@@ -508,17 +556,45 @@ class _ProfilViewState extends State<ProfilView> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ProfileAvatar(
-                          size: 64.0,
-                          imageUrl: _profilePhotoUrl,
-                          fallbackIcon: _roleIcon,
-                          fallbackInitials: widget.role == ProfilRole.guruBk
-                              ? 'NH'
-                              : (widget.role == ProfilRole.orangTua
-                                  ? 'HP'
-                                  : 'MY'),
-                          showEditBadge: true,
-                          onTap: _showPhotoPickerSheet,
+                        Stack(
+                          children: [
+                            ProfileAvatar.currentUser(
+                              size: 64.0,
+                              fallbackIcon: _roleIcon,
+                              fallbackInitials: widget.role == ProfilRole.guruBk
+                                  ? 'NH'
+                                  : (widget.role == ProfilRole.orangTua
+                                      ? 'HP'
+                                      : 'MY'),
+                              showEditBadge: !_isUploadingPhoto,
+                              onTap: _isUploadingPhoto
+                                  ? null
+                                  : _showPhotoPickerSheet,
+                              onEditPressed: _isUploadingPhoto
+                                  ? null
+                                  : _showPhotoPickerSheet,
+                            ),
+                            if (_isUploadingPhoto)
+                              Positioned.fill(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const SizedBox(
+                                    width: 22.0,
+                                    height: 22.0,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(width: 14.0),
                         Expanded(
@@ -662,7 +738,7 @@ class _ProfilViewState extends State<ProfilView> {
                           Switch(
                             value: _notifikasiAktif,
                             activeColor: AppColors.primaryNavy,
-                            onChanged: (val) {
+                            onChanged: (val) async {
                               setState(() => _notifikasiAktif = val);
                               ToastNotification.show(
                                 context,
@@ -671,6 +747,10 @@ class _ProfilViewState extends State<ProfilView> {
                                     : 'Notifikasi sistem telah dinonaktifkan',
                                 type: ToastType.success,
                               );
+                              try {
+                                await AuthService.instance
+                                    .updateProfile(notifySystem: val);
+                              } catch (_) {}
                             },
                           ),
                         ],
