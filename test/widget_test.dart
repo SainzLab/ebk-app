@@ -573,4 +573,61 @@ void main() {
     expect(find.text('Hapus Catatan Kasus'), findsNothing);
     expect(find.text('Kembali'), findsOneWidget);
   });
+
+  testWidgets(
+      'JadwalKonselingScreen calendar card supports changing week, month, date, and year',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: JadwalKonselingScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 1. Initial display shows November 2026
+    expect(find.text('November 2026'), findsOneWidget);
+    expect(find.text('Lihat Semua Hari'), findsOneWidget);
+
+    // 2. Test week navigation (Minggu Berikutnya)
+    final nextWeekButton = find.byTooltip('Minggu Berikutnya');
+    expect(nextWeekButton, findsOneWidget);
+    await tester.tap(nextWeekButton);
+    await tester.pumpAndSettle();
+
+    // 3. Test Month & Year picker bottom sheet
+    final monthYearButton = find.byTooltip('Pilih Bulan & Tahun');
+    expect(monthYearButton, findsOneWidget);
+    await tester.tap(monthYearButton);
+    await tester.pumpAndSettle();
+
+    // Verify sheet opened
+    expect(find.text('Pilih Bulan & Tahun'), findsOneWidget);
+    expect(find.text('Pilih Tanggal Spesifik (Kalender)'), findsOneWidget);
+    expect(find.text('Kembali ke Hari Ini'), findsOneWidget);
+
+    // Tap "Des" month
+    await tester.tap(find.text('Des'));
+    await tester.pumpAndSettle();
+
+    // Verify month updated to Desember 2026
+    expect(find.text('Desember 2026'), findsOneWidget);
+
+    // 4. Test "Lihat Semua Hari" toggle
+    await tester.tap(find.text('Lihat Semua Hari'));
+    await tester.pumpAndSettle();
+    expect(find.text('Semua Hari'), findsWidgets);
+    expect(find.text('Filter Hari Ini'), findsOneWidget);
+
+    // Toggle back to Filter Hari Ini
+    await tester.tap(find.text('Filter Hari Ini'));
+    await tester.pumpAndSettle();
+    expect(find.text('Lihat Semua Hari'), findsOneWidget);
+  });
 }

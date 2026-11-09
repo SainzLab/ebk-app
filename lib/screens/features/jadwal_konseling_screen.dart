@@ -13,10 +13,12 @@ import '../states/delete_dialog.dart';
 class _WeekDayItem {
   final String dayName;
   final String dateNum;
+  final DateTime date;
 
   const _WeekDayItem({
     required this.dayName,
     required this.dateNum,
+    required this.date,
   });
 }
 
@@ -45,9 +47,94 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   // Master Data Layanan Konseling
   late List<CounselingModel> _sessions;
 
-  // Navigasi Kalender Mingguan
-  int _selectedDayIndex = 5; // Sab 07 Nov
+  // Navigasi Kalender Mingguan & Bulanan
+  DateTime _selectedDate = DateTime(2026, 11, 7); // Default ke Sab 07 Nov 2026 sesuai data mock
   bool _filterByDay = true;
+
+  // Nama-nama Hari & Bulan untuk Navigasi Kalender
+  static const List<String> _dayNamesShort = [
+    'Sen',
+    'Sel',
+    'Rab',
+    'Kam',
+    'Jum',
+    'Sab',
+    'Min',
+  ];
+
+  static const List<String> _monthNamesShort = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'Mei',
+    'Jun',
+    'Jul',
+    'Agu',
+    'Sep',
+    'Okt',
+    'Nov',
+    'Des',
+  ];
+
+  static const List<String> _monthNamesFull = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ];
+
+  String _formatMonthYear(DateTime d) {
+    return '${_monthNamesFull[d.month - 1]} ${d.year}';
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  List<_WeekDayItem> _getWeekDays(DateTime referenceDate) {
+    final clean = DateTime(referenceDate.year, referenceDate.month, referenceDate.day);
+    final monday = clean.subtract(Duration(days: clean.weekday - 1));
+
+    return List.generate(7, (i) {
+      final d = DateTime(monday.year, monday.month, monday.day + i);
+      return _WeekDayItem(
+        dayName: _dayNamesShort[i],
+        dateNum: d.day.toString().padLeft(2, '0'),
+        date: d,
+      );
+    });
+  }
+
+  void _goToPrevWeek() {
+    setState(() {
+      _selectedDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day - 7,
+      );
+      _filterByDay = true;
+    });
+  }
+
+  void _goToNextWeek() {
+    setState(() {
+      _selectedDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day + 7,
+      );
+      _filterByDay = true;
+    });
+  }
 
   // Controller Pencarian
   final TextEditingController _searchController = TextEditingController();
@@ -59,16 +146,6 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   String _selectedCategoryFilter = 'Semua Jenis';
   String _selectedStatusFilter = 'Semua';
   String _selectedClassFilter = 'Semua';
-
-  static const List<_WeekDayItem> _weekDays = [
-    _WeekDayItem(dayName: 'Sen', dateNum: '02'),
-    _WeekDayItem(dayName: 'Sel', dateNum: '03'),
-    _WeekDayItem(dayName: 'Rab', dateNum: '04'),
-    _WeekDayItem(dayName: 'Kam', dateNum: '05'),
-    _WeekDayItem(dayName: 'Jum', dateNum: '06'),
-    _WeekDayItem(dayName: 'Sab', dateNum: '07'),
-    _WeekDayItem(dayName: 'Min', dateNum: '08'),
-  ];
 
   static const List<String> _quickFilterChips = [
     'Semua Sesi',
@@ -163,7 +240,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
       _selectedStatusFilter = 'Semua';
       _selectedClassFilter = 'Semua';
       _filterByDay = true;
-      _selectedDayIndex = 5;
+      _selectedDate = DateTime(2026, 11, 7);
       _searchController.clear();
       _searchQuery = '';
     });
@@ -171,8 +248,8 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
 
   List<CounselingModel> get _filteredSessions {
     final list = _sessions.where((session) {
-      // Filter Tanggal Mingguan (bila aktif)
-      if (_filterByDay && session.dayIndex != _selectedDayIndex) {
+      // Filter Tanggal Mingguan & Harian (bila aktif)
+      if (_filterByDay && !_isSameDay(session.resolvedDate, _selectedDate)) {
         return false;
       }
 
@@ -281,8 +358,8 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
     ToastNotification.show(
       context,
       message: newStatus
-          ? 'Layanan ${session.id} diselesaikan.'
-          : 'Status layanan ${session.id} dibuka kembali (Dalam Proses).',
+          ? 'Layanan ${session.studentName} diselesaikan.'
+          : 'Status layanan ${session.studentName} dibuka kembali (Dalam Proses).',
       type: ToastType.success,
     );
   }
@@ -293,7 +370,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
       context,
       title: 'Hapus Layanan Konseling?',
       message:
-          'Apakah Anda yakin ingin menghapus jadwal layanan konseling ${session.id} (${session.topic} - ${session.studentName}) secara permanen?',
+          'Apakah Anda yakin ingin menghapus jadwal layanan konseling ${session.studentName} secara permanen?',
     );
 
     if (confirmed == true && mounted) {
@@ -386,6 +463,429 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
           child: child!,
         );
       },
+    );
+  }
+
+  // Dialog Pemilihan Tahun (2020..2035)
+  Future<int?> _showYearSelectionDialog(
+      BuildContext context, int currentYear) async {
+    return showDialog<int>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: AppColors.pureWhite,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          title: const Text(
+            'Pilih Tahun',
+            style: AppTextStyles.sectionHeader16,
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 280.0,
+            child: ListView.builder(
+              itemCount: 16, // 2020..2035
+              itemBuilder: (context, index) {
+                final year = 2020 + index;
+                final isSelected = year == currentYear;
+                return ListTile(
+                  dense: true,
+                  title: Text(
+                    '$year',
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontFamily,
+                      fontSize: 15.0,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected
+                          ? AppColors.primaryNavy
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  trailing: isSelected
+                      ? const Icon(
+                          Icons.check_rounded,
+                          color: AppColors.primaryNavy,
+                          size: 20.0,
+                        )
+                      : null,
+                  onTap: () => Navigator.pop(dialogCtx, year),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Modal Bottom Sheet: Pilih Bulan & Tahun Konseling
+  void _showMonthYearPickerSheet(BuildContext context) {
+    int pickerYear = _selectedDate.year;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: AppColors.pureWhite,
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(24.0)),
+              ),
+              padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 24.0),
+              child: SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Drag handle bar
+                    Center(
+                      child: Container(
+                        width: 38.0,
+                        height: 4.0,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderSoft,
+                          borderRadius: BorderRadius.circular(2.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // Header Title & Close Button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text(
+                              'Pilih Bulan & Tahun',
+                              style: AppTextStyles.sectionHeader16,
+                            ),
+                            SizedBox(height: 2.0),
+                            Text(
+                              'Sesuaikan periode kalender layanan konseling',
+                              style: AppTextStyles.caption,
+                            ),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.pop(ctx),
+                          child: Container(
+                            padding: const EdgeInsets.all(6.0),
+                            decoration: const BoxDecoration(
+                              color: AppColors.canvasLightGray,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18.0,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16.0),
+
+                    // Bar Pemilih Tahun (<  2026  >)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0, vertical: 4.0),
+                      decoration: BoxDecoration(
+                        color: AppColors.canvasLightGray,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(color: AppColors.borderSoft),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left_rounded),
+                            color: AppColors.primaryNavy,
+                            tooltip: 'Tahun Sebelumnya',
+                            onPressed: pickerYear > 2020
+                                ? () => setSheetState(() => pickerYear--)
+                                : null,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
+                          ),
+                          GestureDetector(
+                            onTap: () async {
+                              final chosenYear =
+                                  await _showYearSelectionDialog(
+                                      context, pickerYear);
+                              if (chosenYear != null) {
+                                setSheetState(() => pickerYear = chosenYear);
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14.0, vertical: 6.0),
+                              decoration: BoxDecoration(
+                                color: AppColors.pureWhite,
+                                borderRadius: BorderRadius.circular(8.0),
+                                border:
+                                    Border.all(color: AppColors.borderSoft),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '$pickerYear',
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontFamily,
+                                      fontSize: 16.0,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryNavy,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4.0),
+                                  const Icon(
+                                    Icons.arrow_drop_down_rounded,
+                                    size: 20.0,
+                                    color: AppColors.primaryNavy,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.chevron_right_rounded),
+                            color: AppColors.primaryNavy,
+                            tooltip: 'Tahun Berikutnya',
+                            onPressed: pickerYear < 2035
+                                ? () => setSheetState(() => pickerYear++)
+                                : null,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 36, minHeight: 36),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // Grid 12 Bulan (4 kolom x 3 baris)
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 12,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 4,
+                        mainAxisSpacing: 8.0,
+                        crossAxisSpacing: 8.0,
+                        childAspectRatio: 1.85,
+                      ),
+                      itemBuilder: (context, idx) {
+                        final monthIdx = idx + 1;
+                        final isSelected = _selectedDate.month == monthIdx &&
+                            _selectedDate.year == pickerYear;
+                        final monthLabel = _monthNamesShort[idx];
+                        final hasSessionsInMonth = _sessions.any((s) {
+                          final d = s.resolvedDate;
+                          return d.year == pickerYear && d.month == monthIdx;
+                        });
+
+                        return GestureDetector(
+                          onTap: () {
+                            final daysInMonth =
+                                DateTime(pickerYear, monthIdx + 1, 0).day;
+                            final newDay =
+                                _selectedDate.day.clamp(1, daysInMonth);
+                            setState(() {
+                              _selectedDate =
+                                  DateTime(pickerYear, monthIdx, newDay);
+                              _filterByDay = true;
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primaryNavy
+                                  : AppColors.canvasLightGray,
+                              borderRadius: BorderRadius.circular(10.0),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.primaryNavy
+                                    : AppColors.borderSoft,
+                              ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.primaryNavy
+                                            .withValues(alpha: 0.25),
+                                        offset: const Offset(0, 3),
+                                        blurRadius: 6.0,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Text(
+                                  monthLabel,
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 12.0,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    color: isSelected
+                                        ? AppColors.pureWhite
+                                        : AppColors.textPrimary,
+                                  ),
+                                ),
+                                if (hasSessionsInMonth && !isSelected)
+                                  Positioned(
+                                    bottom: 4.0,
+                                    child: Container(
+                                      width: 4.0,
+                                      height: 4.0,
+                                      decoration: const BoxDecoration(
+                                        color: AppColors.primaryNavy,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16.0),
+
+                    // Tombol Aksi 1: Buka Kalender Lengkap (Pilih Tanggal Spesifik)
+                    CustomButton.secondary(
+                      label: 'Pilih Tanggal Spesifik (Kalender)',
+                      leadingIcon: Icons.calendar_today_rounded,
+                      height: 46.0,
+                      onPressed: () async {
+                        Navigator.pop(ctx);
+                        final picked = await _showCustomDatePicker(
+                          context,
+                          initialDate: _selectedDate,
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            _selectedDate = picked;
+                            _filterByDay = true;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8.0),
+
+                    // Tombol Aksi 2: Kembali ke Hari Ini
+                    CustomButton(
+                      label: 'Kembali ke Hari Ini',
+                      leadingIcon: Icons.today_rounded,
+                      height: 46.0,
+                      onPressed: () {
+                        setState(() {
+                          _selectedDate = DateTime.now();
+                          _filterByDay = true;
+                        });
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Tombol Navigasi Arrow Minggu (< dan >)
+  Widget _buildNavIconButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8.0),
+        child: Container(
+          width: 30.0,
+          height: 30.0,
+          decoration: BoxDecoration(
+            color: AppColors.canvasLightGray,
+            borderRadius: BorderRadius.circular(8.0),
+            border: Border.all(
+              color: AppColors.borderSoft,
+              width: 1.0,
+            ),
+          ),
+          child: Icon(
+            icon,
+            size: 18.0,
+            color: AppColors.primaryNavy,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Tombol Badge Bulan & Tahun (Klik untuk Ganti Bulan / Tahun / Tanggal)
+  Widget _buildMonthYearButton(BuildContext context) {
+    return Tooltip(
+      message: 'Pilih Bulan & Tahun',
+      child: InkWell(
+        onTap: () => _showMonthYearPickerSheet(context),
+        borderRadius: BorderRadius.circular(8.0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8.0,
+            vertical: 5.0,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.canvasLightGray,
+            borderRadius: BorderRadius.circular(8.0),
+            border: Border.all(
+              color: AppColors.borderSoft,
+              width: 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.calendar_month_rounded,
+                size: 14.0,
+                color: AppColors.primaryNavy,
+              ),
+              const SizedBox(width: 5.0),
+              Text(
+                _formatMonthYear(_selectedDate),
+                style: AppTextStyles.sectionHeader14,
+              ),
+              const SizedBox(width: 3.0),
+              const Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 16.0,
+                color: AppColors.primaryNavy,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -692,30 +1192,6 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 3.0,
-                                      horizontal: 8.0,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primaryTint,
-                                      borderRadius: BorderRadius.circular(6.0),
-                                    ),
-                                    child: Text(
-                                      session.id,
-                                      style: AppTextStyles.badgeBold10,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6.0),
-                                  Text(
-                                    session.timeRange,
-                                    style: AppTextStyles.subtitle11,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6.0),
                               Text(
                                 session.studentName,
                                 style: AppTextStyles.heading2,
@@ -756,7 +1232,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(height: 16.0),
 
                     // 1. Menetapkan Jenis Konseling
-                    const Text('1. Menetapkan Jenis Konseling',
+                    const Text('Menetapkan Jenis Konseling',
                         style: AppTextStyles.label),
                     const SizedBox(height: 8.0),
                     Wrap(
@@ -774,7 +1250,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(height: 16.0),
 
                     // 2. Topik Bimbingan
-                    const Text('2. Topik Konseling', style: AppTextStyles.label),
+                    const Text('Topik Konseling', style: AppTextStyles.label),
                     const SizedBox(height: 7.0),
                     CustomTextField(
                       controller: topicCtrl,
@@ -784,7 +1260,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(height: 16.0),
 
                     // 3. Mencatat Hasil Konseling
-                    const Text('3. Catatan Hasil Konseling / Diskusi',
+                    const Text('Catatan Hasil Konseling / Diskusi',
                         style: AppTextStyles.label),
                     const SizedBox(height: 7.0),
                     Container(
@@ -812,7 +1288,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(height: 16.0),
 
                     // 4. Tindak Lanjut Pembinaan
-                    const Text('4. Rencana Tindak Lanjut Siswa',
+                    const Text('Rencana Tindak Lanjut Siswa',
                         style: AppTextStyles.label),
                     const SizedBox(height: 7.0),
                     Container(
@@ -840,7 +1316,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(height: 16.0),
 
                     // 5. Memperbarui Status Kasus / Layanan (Tanpa Dot)
-                    const Text('5. Status Layanan Konseling',
+                    const Text('Status Layanan Konseling',
                         style: AppTextStyles.label),
                     const SizedBox(height: 8.0),
                     Row(
@@ -948,7 +1424,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                         ToastNotification.show(
                           context,
                           message:
-                              'Berhasil: Catatan hasil dan status layanan ${session.id} telah diperbarui.',
+                              'Berhasil: Catatan hasil dan status layanan ${session.studentName} telah diperbarui.',
                           type: ToastType.success,
                         );
                       },
@@ -1212,7 +1688,8 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                         if (!mounted) return;
                         setState(() {
                           _sessions.insert(0, newSession);
-                          _selectedDayIndex = dayIdx;
+                          _selectedDate = selectedDateTime;
+                          _filterByDay = true;
                         });
 
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -1290,53 +1767,11 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                       ),
                     ),
                     const SizedBox(height: 14.0),
-
-                    // Header: ID, Judul & Tombol Hapus Cepat
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 4.0,
-                                  horizontal: 8.0,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryTint,
-                                  borderRadius: BorderRadius.circular(6.0),
-                                ),
-                                child: Text(
-                                  session.id,
-                                  style: AppTextStyles.badgeBold10,
-                                ),
-                              ),
-                              const SizedBox(width: 8.0),
-                              const Flexible(
-                                child: Text(
-                                  'Edit Data Layanan Konseling',
-                                  style: AppTextStyles.heading2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          iconSize: 22.0,
-                          tooltip: 'Hapus Layanan',
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _deleteSession(session);
-                          },
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            color: AppColors.errorPrimary,
-                          ),
-                        ),
-                      ],
+                    const Center(
+                      child: Text(
+                        'Edit Data Layanan Konseling',
+                        style: AppTextStyles.heading2,
+                      ),
                     ),
                     const SizedBox(height: 14.0),
 
@@ -1681,7 +2116,8 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                           if (mounted) {
                             setState(() {
                               _sessions[idx] = updatedItem;
-                              _selectedDayIndex = dayIdx;
+                              _selectedDate = selectedDateTime;
+                              _filterByDay = true;
                             });
                           }
                         }
@@ -1691,7 +2127,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                         ToastNotification.show(
                           context,
                           message:
-                              'Berhasil: Data layanan ${session.id} telah diperbarui.',
+                              'Berhasil: Data layanan ${session.studentName} telah diperbarui.',
                           type: ToastType.success,
                         );
                       },
@@ -1751,68 +2187,6 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                   ),
                 ),
                 const SizedBox(height: 14.0),
-
-                // Baris ID, Status & Tombol Hapus Cepat
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 4.0,
-                        horizontal: 10.0,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryTint,
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
-                      child: Text(
-                        session.id,
-                        style: AppTextStyles.badgeBold10,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        IconButton(
-                          iconSize: 20.0,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          tooltip: 'Hapus Layanan',
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _deleteSession(session);
-                          },
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            color: AppColors.errorPrimary,
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4.0,
-                            horizontal: 10.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: session.isCompleted
-                                ? AppColors.successBg
-                                : AppColors.warningBg,
-                            borderRadius: BorderRadius.circular(99.0),
-                          ),
-                          child: Text(
-                            session.statusLabel,
-                            style: AppTextStyles.captionSemibold11.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: session.isCompleted
-                                  ? AppColors.successText
-                                  : AppColors.warningText,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12.0),
 
                 Text(session.topic, style: AppTextStyles.heading2),
                 const SizedBox(height: 6.0),
@@ -1921,7 +2295,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     const SizedBox(width: 8.0),
                     Expanded(
                       child: CustomButton(
-                        label: 'Catat Hasil',
+                        label: 'Catatan',
                         variant: CustomButtonVariant.secondary,
                         height: 44.0,
                         onPressed: () {
@@ -1934,8 +2308,8 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                     Expanded(
                       child: CustomButton(
                         label: session.isCompleted
-                            ? 'Buka Kembali'
-                            : 'Selesaikan',
+                            ? 'Buka'
+                            : 'Selesai',
                         height: 44.0,
                         onPressed: () {
                           Navigator.pop(ctx);
@@ -2126,27 +2500,19 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Text(
-                                            'November 2026',
-                                            style: AppTextStyles.sectionHeader14,
+                                          _buildNavIconButton(
+                                            icon: Icons.chevron_left_rounded,
+                                            tooltip: 'Minggu Sebelumnya',
+                                            onTap: _goToPrevWeek,
                                           ),
-                                          const SizedBox(width: 8.0),
-                                          if (!_filterByDay)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                vertical: 2.0,
-                                                horizontal: 7.0,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: AppColors.primaryTint,
-                                                borderRadius:
-                                                    BorderRadius.circular(6.0),
-                                              ),
-                                              child: const Text(
-                                                'Semua Hari',
-                                                style: AppTextStyles.badgeBold10,
-                                              ),
-                                            ),
+                                          const SizedBox(width: 6.0),
+                                          _buildMonthYearButton(context),
+                                          const SizedBox(width: 6.0),
+                                          _buildNavIconButton(
+                                            icon: Icons.chevron_right_rounded,
+                                            tooltip: 'Minggu Berikutnya',
+                                            onTap: _goToNextWeek,
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -2167,11 +2533,15 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                                         color: AppColors.canvasLightGray,
                                         borderRadius:
                                             BorderRadius.circular(8.0),
+                                        border: Border.all(
+                                          color: AppColors.borderSoft,
+                                          width: 1.0,
+                                        ),
                                       ),
                                       child: Text(
                                         _filterByDay
-                                            ? 'Lihat Semua Hari'
-                                            : 'Filter Hari Ini',
+                                            ? 'Semua Hari'
+                                            : 'Hari Ini',
                                         style: const TextStyle(
                                           fontFamily:
                                               AppTextStyles.fontFamily,
@@ -2187,117 +2557,141 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                               const SizedBox(height: 12.0),
 
                               // Deretan Hari Mingguan
-                              Row(
-                                children:
-                                    List.generate(_weekDays.length, (index) {
-                                  final item = _weekDays[index];
-                                  final bool isSelected =
-                                      _filterByDay && _selectedDayIndex == index;
-                                  final bool hasSessionOnDay = _sessions.any(
-                                      (s) => s.dayIndex == index);
+                              Builder(builder: (context) {
+                                final weekDays = _getWeekDays(_selectedDate);
+                                return GestureDetector(
+                                  onHorizontalDragEnd: (details) {
+                                    if (details.primaryVelocity != null) {
+                                      if (details.primaryVelocity! < -150) {
+                                        _goToNextWeek();
+                                      } else if (details.primaryVelocity! >
+                                          150) {
+                                        _goToPrevWeek();
+                                      }
+                                    }
+                                  },
+                                  child: Row(
+                                    children:
+                                        List.generate(weekDays.length, (index) {
+                                      final item = weekDays[index];
+                                      final bool isSelected = _filterByDay &&
+                                          _isSameDay(_selectedDate, item.date);
+                                      final bool hasSessionOnDay =
+                                          _sessions.any((s) => _isSameDay(
+                                              s.resolvedDate, item.date));
 
-                                  return Expanded(
-                                    child: Padding(
-                                      padding: EdgeInsets.only(
-                                        right: index < _weekDays.length - 1
-                                            ? 6.0
-                                            : 0,
-                                      ),
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _selectedDayIndex = index;
-                                            _filterByDay = true;
-                                          });
-                                        },
-                                        child: Container(
-                                          height: 61.0,
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 8.0,
-                                            horizontal: 4.0,
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: EdgeInsets.only(
+                                            right: index < weekDays.length - 1
+                                                ? 6.0
+                                                : 0,
                                           ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? AppColors.primaryNavy
-                                                : AppColors.inputSurfaceGray,
-                                            borderRadius:
-                                                BorderRadius.circular(16.0),
-                                            border: isSelected
-                                                ? null
-                                                : Border.all(
-                                                    color: AppColors.borderSoft,
-                                                    width: 1.0,
-                                                  ),
-                                            boxShadow: isSelected
-                                                ? [
-                                                    BoxShadow(
-                                                      color: AppColors
-                                                          .primaryNavy
-                                                          .withValues(
-                                                              alpha: 0.22),
-                                                      offset:
-                                                          const Offset(0, 4),
-                                                      blurRadius: 10.0,
-                                                    ),
-                                                  ]
-                                                : null,
-                                          ),
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                item.dayName,
-                                                style: TextStyle(
-                                                  fontFamily: AppTextStyles
-                                                      .fontFamily,
-                                                  fontSize: 10.0,
-                                                  height: 13.0 / 10.0,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isSelected
-                                                      ? AppColors.borderBlueTint
-                                                      : AppColors
-                                                          .textPlaceholder,
-                                                ),
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedDate = item.date;
+                                                _filterByDay = true;
+                                              });
+                                            },
+                                            child: Container(
+                                              height: 61.0,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                vertical: 8.0,
+                                                horizontal: 4.0,
                                               ),
-                                              const SizedBox(height: 4.0),
-                                              Text(
-                                                item.dateNum,
-                                                style: TextStyle(
-                                                  fontFamily: AppTextStyles
-                                                      .fontFamily,
-                                                  fontSize: 13.0,
-                                                  height: 17.0 / 13.0,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: isSelected
-                                                      ? AppColors.pureWhite
-                                                      : AppColors.textPrimary,
-                                                ),
+                                              decoration: BoxDecoration(
+                                                color: isSelected
+                                                    ? AppColors.primaryNavy
+                                                    : AppColors
+                                                        .inputSurfaceGray,
+                                                borderRadius:
+                                                    BorderRadius.circular(16.0),
+                                                border: isSelected
+                                                    ? null
+                                                    : Border.all(
+                                                        color: AppColors
+                                                            .borderSoft,
+                                                        width: 1.0,
+                                                      ),
+                                                boxShadow: isSelected
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: AppColors
+                                                              .primaryNavy
+                                                              .withValues(
+                                                                  alpha: 0.22),
+                                                          offset: const Offset(
+                                                              0, 4),
+                                                          blurRadius: 10.0,
+                                                        ),
+                                                      ]
+                                                    : null,
                                               ),
-                                              const SizedBox(height: 4.0),
-                                              Container(
-                                                width: 5.0,
-                                                height: 5.0,
-                                                decoration: BoxDecoration(
-                                                  color: hasSessionOnDay
-                                                      ? (isSelected
-                                                          ? AppColors.blueLight
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    item.dayName,
+                                                    style: TextStyle(
+                                                      fontFamily: AppTextStyles
+                                                          .fontFamily,
+                                                      fontSize: 10.0,
+                                                      height: 13.0 / 10.0,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: isSelected
+                                                          ? AppColors
+                                                              .borderBlueTint
                                                           : AppColors
-                                                              .primaryNavy)
-                                                      : Colors.transparent,
-                                                  shape: BoxShape.circle,
-                                                ),
+                                                              .textPlaceholder,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4.0),
+                                                  Text(
+                                                    item.dateNum,
+                                                    style: TextStyle(
+                                                      fontFamily: AppTextStyles
+                                                          .fontFamily,
+                                                      fontSize: 13.0,
+                                                      height: 17.0 / 13.0,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                      color: isSelected
+                                                          ? AppColors.pureWhite
+                                                          : AppColors
+                                                              .textPrimary,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4.0),
+                                                  Container(
+                                                    width: 5.0,
+                                                    height: 5.0,
+                                                    decoration: BoxDecoration(
+                                                      color: hasSessionOnDay
+                                                          ? (isSelected
+                                                              ? AppColors
+                                                                  .blueLight
+                                                              : AppColors
+                                                                  .primaryNavy)
+                                                          : Colors.transparent,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ),
+                                      );
+                                    }),
+                                  ),
+                                );
+                              }),
                             ],
                           ),
                         ),
@@ -2457,7 +2851,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
                             Expanded(
                               child: Text(
                                 _filterByDay
-                                    ? 'Jadwal ${_weekDays[_selectedDayIndex].dayName}, ${_weekDays[_selectedDayIndex].dateNum} Nov'
+                                    ? 'Jadwal ${_dayNamesShort[_selectedDate.weekday - 1]}, ${_selectedDate.day.toString().padLeft(2, '0')} ${_monthNamesShort[_selectedDate.month - 1]} ${_selectedDate.year}'
                                     : 'Semua Jadwal Konseling',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -2637,35 +3031,32 @@ class _CounselingCardItem extends StatelessWidget {
                     Expanded(
                       child: Row(
                         children: [
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 4.0,
-                                horizontal: 6.0,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryTint,
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.access_time_rounded,
-                                    size: 13.0,
-                                    color: AppColors.primaryNavy,
-                                  ),
-                                  const SizedBox(width: 4.0),
-                                  Flexible(
-                                    child: Text(
-                                      session.timeRange,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: AppTextStyles.badgeBold10,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          // 1. Flexible pertama dihapus agar kotak waktu tidak dipaksa mengecil
+                          Container( 
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4.0,
+                              horizontal: 6.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryTint,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.access_time_rounded,
+                                  size: 13.0,
+                                  color: AppColors.primaryNavy,
+                                ),
+                                const SizedBox(width: 4.0),
+                                // 2. Flexible kedua dan TextOverflow.ellipsis dihapus
+                                Text(
+                                  // 3. Menghapus teks " WIB" agar benar-benar murni jam saja
+                                  session.timeRange.replaceAll(' WIB', ''), 
+                                  style: AppTextStyles.badgeBold10,
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 4.0),
@@ -2839,8 +3230,8 @@ class _CounselingCardItem extends StatelessWidget {
                             const SizedBox(width: 4.0),
                             Text(
                               session.isCompleted
-                                  ? 'Buka Kembali'
-                                  : 'Selesaikan',
+                                  ? 'Buka'
+                                  : 'Selesai',
                               style: TextStyle(
                                 fontFamily: AppTextStyles.fontFamily,
                                 fontSize: 10.5,

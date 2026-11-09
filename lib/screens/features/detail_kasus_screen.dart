@@ -589,8 +589,8 @@ class _DetailKasusScreenState extends State<DetailKasusScreen> {
                                 Expanded(
                                   child: CustomButton(
                                     label: isCompleted
-                                        ? 'Buka Kembali'
-                                        : 'Tandai Selesai',
+                                        ? 'Buka'
+                                        : 'Selesai',
                                     variant: isCompleted
                                         ? CustomButtonVariant.outlineNeutral
                                         : CustomButtonVariant.primary,
