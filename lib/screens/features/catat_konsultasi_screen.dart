@@ -625,7 +625,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
                     Text(
                       isEdit
-                          ? 'Edit Catatan Konsultasi • ${editItem.parentName}'
+                          ? 'Edit Catatan Konsultasi ${editItem.parentName}'
                           : 'Catat Konsultasi Orang Tua',
                       style: AppTextStyles.heading2,
                     ),
@@ -1261,79 +1261,82 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
                 // ID, Metode & Status (Tanpa Dot)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        if (item.isFromRequest) ...[
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6.0,
+                        runSpacing: 6.0,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (item.isFromRequest)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4.0,
+                                horizontal: 8.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.infoBg,
+                                borderRadius: BorderRadius.circular(99.0),
+                                border: Border.all(
+                                  color: AppColors.infoBorder,
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.inbox_outlined,
+                                    size: 11.0,
+                                    color: AppColors.infoText,
+                                  ),
+                                  const SizedBox(width: 4.0),
+                                  Text(
+                                    'Pengajuan Wali',
+                                    style: AppTextStyles.captionSemibold11.copyWith(
+                                      color: AppColors.infoText,
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               vertical: 4.0,
-                              horizontal: 8.0,
+                              horizontal: 10.0,
                             ),
                             decoration: BoxDecoration(
-                              color: AppColors.infoBg,
+                              color: AppColors.primaryTint,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Text(
+                              item.studentClass.isNotEmpty && item.studentClass != '-'
+                                  ? item.studentClass
+                                  : 'Konsultasi',
+                              style: AppTextStyles.badgeBold10,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4.0,
+                              horizontal: 9.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.canvasLightGray,
                               borderRadius: BorderRadius.circular(99.0),
-                              border: Border.all(
-                                color: AppColors.infoBorder,
-                                width: 1.0,
-                              ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.inbox_outlined,
-                                  size: 11.0,
-                                  color: AppColors.infoText,
-                                ),
-                                const SizedBox(width: 4.0),
-                                Text(
-                                  'Pengajuan Wali',
-                                  style: AppTextStyles.captionSemibold11.copyWith(
-                                    color: AppColors.infoText,
-                                    fontSize: 10.0,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              item.consultationMethod,
+                              style: AppTextStyles.badgeSemibold10,
                             ),
                           ),
-                          const SizedBox(width: 6.0),
                         ],
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4.0,
-                            horizontal: 10.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryTint,
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          child: Text(
-                            item.studentClass.isNotEmpty && item.studentClass != '-'
-                                ? item.studentClass
-                                : 'Konsultasi',
-                            style: AppTextStyles.badgeBold10,
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 4.0,
-                            horizontal: 9.0,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.canvasLightGray,
-                            borderRadius: BorderRadius.circular(99.0),
-                          ),
-                          child: Text(
-                            item.consultationMethod,
-                            style: AppTextStyles.badgeSemibold10,
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
+                    const SizedBox(width: 8.0),
                     // Badge Status (Tanpa Dot)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1349,6 +1352,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                         style: AppTextStyles.captionSemibold11.copyWith(
                           fontWeight: FontWeight.w700,
                           color: item.statusTextColor,
+                          fontSize: 10.0,
                         ),
                       ),
                     ),
@@ -2015,10 +2019,13 @@ class _ConsultationCardItem extends StatelessWidget {
               children: [
                 // Header Baris ID, Metode, & Status (Tanpa Dot)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Row(
+                      child: Wrap(
+                        spacing: 6.0,
+                        runSpacing: 4.0,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -2037,83 +2044,74 @@ class _ConsultationCardItem extends StatelessWidget {
                               style: AppTextStyles.badgeBold10,
                             ),
                           ),
-                          const SizedBox(width: 6.0),
-                          Flexible(
-                            child: Container(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 3.0,
+                              horizontal: 8.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.canvasLightGray,
+                              borderRadius: BorderRadius.circular(99.0),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _methodIcon,
+                                  size: 12.0,
+                                  color: AppColors.primaryNavy,
+                                ),
+                                const SizedBox(width: 4.0),
+                                Text(
+                                  item.consultationMethod,
+                                  style: const TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 10.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (item.isFromRequest)
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                 vertical: 3.0,
                                 horizontal: 8.0,
                               ),
                               decoration: BoxDecoration(
-                                color: AppColors.canvasLightGray,
+                                color: AppColors.infoBg,
                                 borderRadius: BorderRadius.circular(99.0),
+                                border: Border.all(
+                                  color: AppColors.infoBorder,
+                                  width: 1.0,
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    _methodIcon,
-                                    size: 12.0,
-                                    color: AppColors.primaryNavy,
+                                  const Icon(
+                                    Icons.inbox_outlined,
+                                    size: 11.0,
+                                    color: AppColors.infoText,
                                   ),
                                   const SizedBox(width: 4.0),
-                                  Flexible(
-                                    child: Text(
-                                      item.consultationMethod,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontFamily: AppTextStyles.fontFamily,
-                                        fontSize: 10.0,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textSecondary,
-                                      ),
+                                  Text(
+                                    'Pengajuan Wali',
+                                    style: AppTextStyles.captionSemibold11.copyWith(
+                                      color: AppColors.infoText,
+                                      fontSize: 10.0,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8.0),
-                    if (item.isFromRequest) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 4.0,
-                          horizontal: 8.0,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.infoBg,
-                          borderRadius: BorderRadius.circular(99.0),
-                          border: Border.all(
-                            color: AppColors.infoBorder,
-                            width: 1.0,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.inbox_outlined,
-                              size: 11.0,
-                              color: AppColors.infoText,
-                            ),
-                            const SizedBox(width: 4.0),
-                            Text(
-                              'Pengajuan Wali',
-                              style: AppTextStyles.captionSemibold11.copyWith(
-                                color: AppColors.infoText,
-                                fontSize: 10.0,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6.0),
-                    ],
                     // Badge Status (Tanpa Dot)
                     Container(
                       padding: const EdgeInsets.symmetric(
