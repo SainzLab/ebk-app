@@ -3,6 +3,7 @@ import '../core/app_exception.dart';
 import '../core/auth_service.dart';
 import '../core/pb_client.dart';
 import '../models/case_model.dart';
+import '../models/student_model.dart';
 import 'student_repository.dart';
 
 class CaseRepository {
@@ -23,6 +24,19 @@ class CaseRepository {
     } catch (e) {
       throw AppException.from(e);
     }
+  }
+
+  /// Ambil kasus milik anak-anak wali yang sedang login.
+  /// Difilter di server (`student.guardian = <uid>`) dan diverifikasi ulang
+  /// di klien terhadap daftar anak agar data wali lain tidak pernah tampil.
+  Future<List<CaseRecordModel>> getMyCases(
+    List<StudentDataModel> myChildren,
+  ) async {
+    final uid = AuthService.instance.currentUserId;
+    if (uid.isEmpty || myChildren.isEmpty) return [];
+    final childIds = myChildren.map((c) => c.id).toSet();
+    final list = await getCases(filter: "student.guardian = '$uid'");
+    return list.where((c) => childIds.contains(c.studentId)).toList();
   }
 
   /// Cari ID kategori berdasarkan namanya di `case_categories`.

@@ -83,7 +83,20 @@ class StudentRepository {
               filter: "name = '$escapedName'",
             );
         if (byName.items.isNotEmpty) {
-          return byName.items.first.id;
+          final existing = byName.items.first;
+          if (guardianId != null &&
+              guardianId.isNotEmpty &&
+              existing.getStringValue('guardian') != guardianId) {
+            await _pb.collection('students').update(
+              existing.id,
+              body: {
+                'guardian': guardianId,
+                if (guardianName != null && guardianName.isNotEmpty)
+                  'guardian_name': guardianName,
+              },
+            );
+          }
+          return existing.id;
         }
       }
 

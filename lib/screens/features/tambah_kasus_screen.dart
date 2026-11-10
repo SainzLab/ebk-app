@@ -528,7 +528,6 @@ class _TambahKasusScreenState extends State<TambahKasusScreen> {
   }
 
   Future<void> _handleSave() async {
-    final waktu = _waktuController.text.trim();
     final tempat = _tempatController.text.trim();
     final kronologi = _kronologiController.text.trim();
     final penanganan = _penangananController.text.trim();

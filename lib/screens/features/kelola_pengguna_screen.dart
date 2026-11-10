@@ -456,45 +456,33 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
       return seenKeys.add(key);
     });
 
-    Map<String, String> selectedStudent;
-    if (isEdit) {
-      final match = studentList.cast<Map<String, String>?>().firstWhere(
-        (s) =>
-            s != null &&
-            ((editItem.studentNisn.isNotEmpty &&
-                    editItem.studentNisn != '-' &&
-                    s['nisn'] == editItem.studentNisn) ||
-                editItem.studentChildName.startsWith(s['child'] ?? '')),
-        orElse: () => null,
-      );
-
-      if (match != null) {
-        selectedStudent = match;
-      } else {
-        selectedStudent = {
-          'child': editItem.studentChildName,
-          'class': editItem.studentClass,
-          'nisn': editItem.studentNisn,
-        };
-        studentList.insert(0, selectedStudent);
-      }
-    } else {
-      selectedStudent = studentList.isNotEmpty
-          ? studentList.first
-          : {
-              'child': 'Siswa Belum Terdaftar',
-              'class': 'Kelas VII-A',
-              'nisn': '-',
-            };
-    }
-
     String getStudentKey(Map<String, String> s) =>
         '${s['nisn'] ?? ''}_${s['child'] ?? ''}';
 
-    String selectedStudentKey = getStudentKey(selectedStudent);
-
-    if (!studentList.any((s) => getStudentKey(s) == selectedStudentKey)) {
-      studentList.insert(0, selectedStudent);
+    // Seorang wali boleh memiliki lebih dari satu anak di sekolah yang sama.
+    final List<Map<String, String>> selectedStudents = [];
+    if (isEdit) {
+      if (editItem.children.isNotEmpty) {
+        for (final c in editItem.children) {
+          selectedStudents.add({
+            'child': c.name,
+            'class': c.className,
+            'nisn': c.nisn,
+          });
+        }
+      } else if (editItem.studentNisn.isNotEmpty &&
+          editItem.studentNisn != '-') {
+        selectedStudents.add({
+          'child': editItem.studentChildName.split(' (+').first,
+          'class': editItem.studentClass,
+          'nisn': editItem.studentNisn,
+        });
+      }
+    }
+    for (final sel in selectedStudents) {
+      if (!studentList.any((s) => getStudentKey(s) == getStudentKey(sel))) {
+        studentList.insert(0, sel);
+      }
     }
 
     bool isActiveStatus = isEdit ? editItem.isActive : true;
@@ -561,9 +549,50 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                     ),
                     const SizedBox(height: 14.0),
 
-                    // 2. Siswa Asuh Terkait
+                    // 2. Siswa Asuh Terkait (bisa lebih dari satu anak)
                     const Text('Wali dari Siswa', style: AppTextStyles.label),
                     const SizedBox(height: 6.0),
+                    if (selectedStudents.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          'Belum ada siswa dipilih. Tambahkan minimal satu siswa.',
+                          style: AppTextStyles.subtitle11,
+                        ),
+                      ),
+                    for (final st in selectedStudents)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 8.0),
+                        padding: const EdgeInsets.only(
+                            left: 14.0, top: 6.0, bottom: 6.0, right: 4.0),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(12.0),
+                          border: Border.all(
+                            color: AppColors.borderBlueTint,
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${st['child'] ?? '-'} • ${st['class'] ?? '-'} (${st['nisn'] ?? '-'})',
+                                style: AppTextStyles.body,
+                              ),
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.close_rounded,
+                                  size: 18.0, color: AppColors.errorPrimary),
+                              onPressed: () => setModalState(() {
+                                selectedStudents.removeWhere((x) =>
+                                    getStudentKey(x) == getStudentKey(st));
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14.0),
                       decoration: BoxDecoration(
@@ -576,13 +605,20 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
-                          value: selectedStudentKey,
+                          value: null,
                           isExpanded: true,
+                          hint: const Text(
+                            '+ Tambah siswa asuh',
+                            style: AppTextStyles.body,
+                          ),
                           icon: const Icon(
                             Icons.keyboard_arrow_down_rounded,
                             color: AppColors.primaryNavy,
                           ),
-                          items: studentList.map((s) {
+                          items: studentList
+                              .where((s) => !selectedStudents.any((x) =>
+                                  getStudentKey(x) == getStudentKey(s)))
+                              .map((s) {
                             return DropdownMenuItem<String>(
                               value: getStudentKey(s),
                               child: Text(
@@ -592,15 +628,11 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             );
                           }).toList(),
                           onChanged: (val) {
-                            if (val != null) {
-                              setModalState(() {
-                                selectedStudentKey = val;
-                                selectedStudent = studentList.firstWhere(
-                                  (s) => getStudentKey(s) == val,
-                                  orElse: () => selectedStudent,
-                                );
-                              });
-                            }
+                            if (val == null) return;
+                            setModalState(() {
+                              selectedStudents.add(studentList.firstWhere(
+                                  (s) => getStudentKey(s) == val));
+                            });
                           },
                         ),
                       ),
@@ -743,6 +775,19 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                           return;
                         }
 
+                        if (selectedStudents.isEmpty) {
+                          ToastNotification.show(
+                            context,
+                            message: 'Pilih minimal satu siswa asuh.',
+                            type: ToastType.error,
+                          );
+                          return;
+                        }
+                        final firstStudent = selectedStudents.first;
+                        final extraKids = selectedStudents.length - 1;
+                        final childSummary = extraKids > 0
+                            ? '${firstStudent['child']} (+$extraKids anak)'
+                            : (firstStudent['child'] ?? '-');
                         final emailVal = emailCtrl.text.trim();
                         final phoneVal = phoneCtrl.text.trim();
                         if (emailVal.isNotEmpty &&
@@ -776,9 +821,9 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                               username: usernameCtrl.text.trim(),
                               email: emailVal,
                               phone: phoneVal,
-                              studentChildName: selectedStudent['child'] ?? '-',
-                              studentClass: selectedStudent['class'] ?? '-',
-                              studentNisn: selectedStudent['nisn'] ?? '-',
+                              studentChildName: childSummary,
+                              studentClass: firstStudent['class'] ?? '-',
+                              studentNisn: firstStudent['nisn'] ?? '-',
                               isActive: isActiveStatus,
                             );
                             final pwd = passwordCtrl.text.trim();
@@ -787,6 +832,7 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                                 updatedAcc = await UserRepository.instance
                                     .updateParentAccount(
                                   account: updatedAcc,
+                                  students: selectedStudents,
                                   newPassword:
                                       (pwd != '••••••••' && pwd.length >= 8)
                                           ? pwd
@@ -808,9 +854,9 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             username: usernameCtrl.text.trim(),
                             email: emailVal,
                               phone: phoneVal,
-                            studentChildName: selectedStudent['child'] ?? '-',
-                            studentClass: selectedStudent['class'] ?? '-',
-                            studentNisn: selectedStudent['nisn'] ?? '-',
+                            studentChildName: childSummary,
+                            studentClass: firstStudent['class'] ?? '-',
+                            studentNisn: firstStudent['nisn'] ?? '-',
                             isActive: isActiveStatus,
                             createdAt: 'Hari ini',
                           );
@@ -818,6 +864,7 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             newAcc = await UserRepository.instance
                                 .createParentAccount(
                               account: newAcc,
+                              students: selectedStudents,
                               password: passwordCtrl.text.trim(),
                             );
                           } catch (_) {}

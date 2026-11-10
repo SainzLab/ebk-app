@@ -40,6 +40,7 @@ class UserRepository {
   Future<UserAccountModel> createParentAccount({
     required UserAccountModel account,
     String password = 'password123',
+    List<Map<String, String>>? students,
   }) async {
     try {
       final cleanUsername = account.username.trim();
@@ -67,12 +68,17 @@ class UserRepository {
       );
 
       // Tautkan siswa ke akun orang tua ini (1 orang tua bisa punya banyak anak)
-      await StudentRepository.instance.resolveOrCreateStudentId(
-        nisn: account.studentNisn,
-        name: account.studentChildName,
-        className: account.studentClass,
-        guardianName: account.fullName,
+      await _linkStudents(
+        students ??
+            [
+              {
+                'child': account.studentChildName,
+                'class': account.studentClass,
+                'nisn': account.studentNisn,
+              }
+            ],
         guardianId: createdUser.id,
+        guardianName: account.fullName,
       );
 
       final children = await StudentRepository.instance.getStudents(
@@ -88,6 +94,7 @@ class UserRepository {
   Future<UserAccountModel> updateParentAccount({
     required UserAccountModel account,
     String? newPassword,
+    List<Map<String, String>>? students,
   }) async {
     try {
       final cleanUsername = account.username.trim();
@@ -113,14 +120,36 @@ class UserRepository {
             body: body,
           );
 
-      // Pastikan siswa tertaut ke guardian ini
-      if (account.studentNisn.isNotEmpty && account.studentNisn != '-') {
-        await StudentRepository.instance.resolveOrCreateStudentId(
-          nisn: account.studentNisn,
-          name: account.studentChildName.split(' (+').first,
-          className: account.studentClass,
-          guardianName: account.fullName,
+      if (students != null) {
+        // Sinkronkan: tautkan semua anak terpilih, lepas anak yang dihapus.
+        await _linkStudents(
+          students,
           guardianId: updatedUser.id,
+          guardianName: account.fullName,
+        );
+        final keepNisn = students.map((e) => e['nisn'] ?? '').toSet();
+        final current = await StudentRepository.instance.getStudents(
+          filter: "guardian = '${updatedUser.id}'",
+        );
+        for (final st in current) {
+          if (!keepNisn.contains(st.nisn)) {
+            await _pb.collection('students').update(
+              st.id,
+              body: {'guardian': '', 'guardian_name': '-'},
+            );
+          }
+        }
+      } else if (account.studentNisn.isNotEmpty && account.studentNisn != '-') {
+        await _linkStudents(
+          [
+            {
+              'child': account.studentChildName.split(' (+').first,
+              'class': account.studentClass,
+              'nisn': account.studentNisn,
+            }
+          ],
+          guardianId: updatedUser.id,
+          guardianName: account.fullName,
         );
       }
 
@@ -130,6 +159,22 @@ class UserRepository {
       return UserAccountModel.fromRecord(updatedUser, linkedChildren: children);
     } catch (e) {
       throw AppException.from(e);
+    }
+  }
+
+  Future<void> _linkStudents(
+    List<Map<String, String>> students, {
+    required String guardianId,
+    required String guardianName,
+  }) async {
+    for (final st in students) {
+      await StudentRepository.instance.resolveOrCreateStudentId(
+        nisn: st['nisn'] ?? '',
+        name: st['child'] ?? '',
+        className: st['class'] ?? '',
+        guardianName: guardianName,
+        guardianId: guardianId,
+      );
     }
   }
 

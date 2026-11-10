@@ -104,7 +104,7 @@ class _ProfilViewState extends State<ProfilView> {
               : '';
           return 'Wali dari ${first.name}$extra\n${first.className} • NISN: ${first.nisn}';
         }
-        return 'Wali dari Rizky Pratama\nKelas IX-B • NISN: 0094821034';
+        return 'Belum ada siswa yang tertaut';
       case ProfilRole.kepalaSekolah:
         if (nip.isNotEmpty || pos.isNotEmpty) {
           return '${nip.isNotEmpty ? "NIP. $nip\n" : ""}${pos.isNotEmpty ? pos : "Kepala Sekolah SMPN 1 Pabuaran"}';
