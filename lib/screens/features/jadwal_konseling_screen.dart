@@ -48,7 +48,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
   late List<CounselingModel> _sessions;
 
   // Navigasi Kalender Mingguan & Bulanan
-  DateTime _selectedDate = DateTime(2026, 11, 7); // Default ke Sab 07 Nov 2026 sesuai data mock
+  DateTime _selectedDate = DateTime.now(); // Default ke Sab 07 Nov 2026 sesuai data mock
   bool _filterByDay = true;
 
   // Nama-nama Hari & Bulan untuk Navigasi Kalender
@@ -240,7 +240,7 @@ class _JadwalKonselingScreenState extends State<JadwalKonselingScreen> {
       _selectedStatusFilter = 'Semua';
       _selectedClassFilter = 'Semua';
       _filterByDay = true;
-      _selectedDate = DateTime(2026, 11, 7);
+      _selectedDate = DateTime.now();
       _searchController.clear();
       _searchQuery = '';
     });

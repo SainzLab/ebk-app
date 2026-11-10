@@ -269,6 +269,30 @@ class AuthService extends ChangeNotifier {
         statusCode: 401,
       );
     }
+    if (oldPassword.isEmpty) {
+      throw const AppException(
+        message: 'Kata sandi lama wajib diisi.',
+        statusCode: 400,
+      );
+    }
+    if (newPassword.length < 8) {
+      throw const AppException(
+        message: 'Kata sandi baru minimal 8 karakter.',
+        statusCode: 400,
+      );
+    }
+    if (newPassword != confirmPassword) {
+      throw const AppException(
+        message: 'Konfirmasi kata sandi tidak cocok.',
+        statusCode: 400,
+      );
+    }
+    if (newPassword == oldPassword) {
+      throw const AppException(
+        message: 'Kata sandi baru harus berbeda dari kata sandi lama.',
+        statusCode: 400,
+      );
+    }
     try {
       await _pb.collection('users').update(
         user.id,
@@ -278,6 +302,14 @@ class AuthService extends ChangeNotifier {
           'passwordConfirm': confirmPassword,
         },
       );
+      // PocketBase membatalkan token lama setelah password berubah,
+      // sehingga perlu autentikasi ulang agar sesi tetap valid.
+      final email = user.getStringValue('email');
+      final identity = email.isNotEmpty
+          ? email
+          : user.getStringValue('username');
+      await _pb.collection('users').authWithPassword(identity, newPassword);
+      notifyListeners();
     } catch (e) {
       throw AppException.from(e);
     }

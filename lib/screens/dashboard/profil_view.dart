@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/app_exception.dart';
 import '../../core/auth_service.dart';
+import '../../widgets/custom_text_field.dart';
 import '../../models/student_model.dart';
 import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
@@ -228,6 +230,23 @@ class _ProfilViewState extends State<ProfilView> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    showAnimatedDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _ChangePasswordDialog(
+        onSuccess: () {
+          if (!mounted) return;
+          ToastNotification.show(
+            context,
+            message: 'Kata sandi berhasil diperbarui.',
+            type: ToastType.success,
+          );
+        },
       ),
     );
   }
@@ -805,6 +824,30 @@ class _ProfilViewState extends State<ProfilView> {
               ),
               const SizedBox(height: 18.0),
 
+              // Seksi Keamanan Akun
+              const Text(
+                'Keamanan Akun',
+                style: AppTextStyles.sectionHeader16,
+              ),
+              const SizedBox(height: 10.0),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: AppColors.pureWhite,
+                  borderRadius: BorderRadius.circular(16.0),
+                  border: Border.all(
+                    color: AppColors.borderNeutral,
+                    width: 1.0,
+                  ),
+                ),
+                child: _ActionTile(
+                  icon: Icons.lock_reset_rounded,
+                  title: 'Reset / Ubah Kata Sandi',
+                  onTap: _showChangePasswordDialog,
+                ),
+              ),
+              const SizedBox(height: 18.0),
+
               // Seksi Bantuan & Informasi Aplikasi
               const Text(
                 'Layanan & Bantuan',
@@ -951,6 +994,133 @@ class _ActionTile extends StatelessWidget {
               Icons.chevron_right_rounded,
               size: 20.0,
               color: AppColors.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog ubah kata sandi. Controller dimiliki State sehingga di-dispose
+/// setelah animasi penutupan dialog selesai.
+class _ChangePasswordDialog extends StatefulWidget {
+  final VoidCallback onSuccess;
+  const _ChangePasswordDialog({required this.onSuccess});
+
+  @override
+  State<_ChangePasswordDialog> createState() => _ChangePasswordDialogState();
+}
+
+class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
+  final _oldCtrl = TextEditingController();
+  final _newCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  String? _errorText;
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _oldCtrl.dispose();
+    _newCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _errorText = null;
+      _isSaving = true;
+    });
+    try {
+      await AuthService.instance.changePassword(
+        oldPassword: _oldCtrl.text,
+        newPassword: _newCtrl.text,
+        confirmPassword: _confirmCtrl.text,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSuccess();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isSaving = false;
+        _errorText = e is AppException
+            ? e.message
+            : 'Gagal mengubah kata sandi. Coba lagi.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.0)),
+      backgroundColor: AppColors.pureWhite,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(22.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Ubah Kata Sandi', style: AppTextStyles.heading2),
+            const SizedBox(height: 4.0),
+            const Text(
+              'Kata sandi baru minimal 8 karakter.',
+              style: AppTextStyles.subtitle11,
+            ),
+            const SizedBox(height: 16.0),
+            CustomTextField(
+              label: 'Kata Sandi Lama',
+              hintText: 'Masukkan kata sandi lama',
+              controller: _oldCtrl,
+              isPassword: true,
+              prefixIcon: Icons.lock_outline_rounded,
+            ),
+            const SizedBox(height: 12.0),
+            CustomTextField(
+              label: 'Kata Sandi Baru',
+              hintText: 'Minimal 8 karakter',
+              controller: _newCtrl,
+              isPassword: true,
+              prefixIcon: Icons.lock_outline_rounded,
+            ),
+            const SizedBox(height: 12.0),
+            CustomTextField(
+              label: 'Konfirmasi Kata Sandi Baru',
+              hintText: 'Ulangi kata sandi baru',
+              controller: _confirmCtrl,
+              isPassword: true,
+              prefixIcon: Icons.lock_outline_rounded,
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 10.0),
+              Text(
+                _errorText!,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontFamily,
+                  fontSize: 12.0,
+                  color: AppColors.errorPrimary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 20.0),
+            Row(
+              children: [
+                Expanded(
+                  child: CustomButton.secondary(
+                    label: 'Batal',
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(width: 10.0),
+                Expanded(
+                  child: CustomButton.primary(
+                    label: _isSaving ? 'Menyimpan...' : 'Simpan',
+                    onPressed: _isSaving ? null : _submit,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

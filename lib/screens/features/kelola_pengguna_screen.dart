@@ -438,8 +438,10 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
         TextEditingController(text: isEdit ? editItem.fullName : '');
     final usernameCtrl =
         TextEditingController(text: isEdit ? editItem.username : '');
-    final contactCtrl =
-        TextEditingController(text: isEdit ? editItem.emailOrPhone : '');
+    final emailCtrl = TextEditingController(
+        text: isEdit && editItem.hasRealEmail ? editItem.email : '');
+    final phoneCtrl =
+        TextEditingController(text: isEdit ? editItem.phone : '');
     final passwordCtrl =
         TextEditingController(text: isEdit ? '••••••••' : '12345678');
 
@@ -605,14 +607,26 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                     ),
                     const SizedBox(height: 14.0),
 
-                    // 3. Email / No WhatsApp
-                    const Text('Email / Nomor WhatsApp',
+                    // 3. Email
+                    const Text('Email', style: AppTextStyles.label),
+                    const SizedBox(height: 6.0),
+                    CustomTextField(
+                      controller: emailCtrl,
+                      hintText: 'Contoh: hendra.pratama@gmail.com',
+                      prefixIcon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // 4. Nomor Telepon / WhatsApp
+                    const Text('Nomor Telepon / WhatsApp',
                         style: AppTextStyles.label),
                     const SizedBox(height: 6.0),
                     CustomTextField(
-                      controller: contactCtrl,
-                      hintText: 'Contoh: hendra.pratama@gmail.com / 08123456789',
-                      prefixIcon: Icons.email_outlined,
+                      controller: phoneCtrl,
+                      hintText: 'Contoh: 08123456789',
+                      prefixIcon: Icons.phone_android_rounded,
+                      keyboardType: TextInputType.phone,
                     ),
                     const SizedBox(height: 14.0),
 
@@ -729,6 +743,30 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                           return;
                         }
 
+                        final emailVal = emailCtrl.text.trim();
+                        final phoneVal = phoneCtrl.text.trim();
+                        if (emailVal.isNotEmpty &&
+                            !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                                .hasMatch(emailVal)) {
+                          ToastNotification.show(
+                            context,
+                            message: 'Format email tidak valid.',
+                            type: ToastType.error,
+                          );
+                          return;
+                        }
+                        if (phoneVal.isNotEmpty &&
+                            !RegExp(r'^\+?[0-9\s\-]{8,16}$')
+                                .hasMatch(phoneVal)) {
+                          ToastNotification.show(
+                            context,
+                            message:
+                                'Nomor telepon tidak valid (8-16 digit).',
+                            type: ToastType.error,
+                          );
+                          return;
+                        }
+
                         if (isEdit) {
                           final idx = _accounts
                               .indexWhere((a) => a.id == editItem.id);
@@ -736,7 +774,8 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             var updatedAcc = _accounts[idx].copyWith(
                               fullName: nameCtrl.text.trim(),
                               username: usernameCtrl.text.trim(),
-                              emailOrPhone: contactCtrl.text.trim(),
+                              email: emailVal,
+                              phone: phoneVal,
                               studentChildName: selectedStudent['child'] ?? '-',
                               studentClass: selectedStudent['class'] ?? '-',
                               studentNisn: selectedStudent['nisn'] ?? '-',
@@ -767,7 +806,8 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                             id: newId,
                             fullName: nameCtrl.text.trim(),
                             username: usernameCtrl.text.trim(),
-                            emailOrPhone: contactCtrl.text.trim(),
+                            email: emailVal,
+                              phone: phoneVal,
                             studentChildName: selectedStudent['child'] ?? '-',
                             studentClass: selectedStudent['class'] ?? '-',
                             studentNisn: selectedStudent['nisn'] ?? '-',
@@ -956,9 +996,15 @@ class _KelolaPenggunaScreenState extends State<KelolaPenggunaScreen> {
                 ),
                 const SizedBox(height: 10.0),
                 _DetailInfoTile(
-                  label: 'Email / WhatsApp Terdaftar',
-                  value: user.emailOrPhone,
+                  label: 'Email Terdaftar',
+                  value: user.hasRealEmail ? user.email : '-',
                   icon: Icons.email_outlined,
+                ),
+                const SizedBox(height: 10.0),
+                _DetailInfoTile(
+                  label: 'Nomor Telepon / WhatsApp',
+                  value: user.phone.isNotEmpty ? user.phone : '-',
+                  icon: Icons.phone_android_rounded,
                 ),
                 const SizedBox(height: 10.0),
                 _DetailInfoTile(

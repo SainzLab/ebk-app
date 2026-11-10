@@ -42,12 +42,11 @@ class UserRepository {
     String password = 'password123',
   }) async {
     try {
-      final rawContact = account.emailOrPhone.trim();
-      final isEmail = rawContact.contains('@');
       final cleanUsername = account.username.trim();
+      final rawEmail = account.email.trim();
       final emailValue =
-          isEmail ? rawContact : '$cleanUsername@ortu.ebk.sch.id';
-      final phoneValue = isEmail ? '' : rawContact;
+          rawEmail.isNotEmpty ? rawEmail : '$cleanUsername@ortu.ebk.sch.id';
+      final phoneValue = account.phone.trim();
       final effectivePassword =
           password.trim().length >= 8 ? password.trim() : 'password123';
 
@@ -91,14 +90,16 @@ class UserRepository {
     String? newPassword,
   }) async {
     try {
-      final rawContact = account.emailOrPhone.trim();
-      final isEmail = rawContact.contains('@');
       final cleanUsername = account.username.trim();
+      final rawEmail = account.email.trim();
 
       final body = <String, dynamic>{
         'name': account.fullName.trim(),
         'username': cleanUsername,
-        if (isEmail) 'email': rawContact else 'phone': rawContact,
+        // Kosongkan email -> kembali ke email placeholder berbasis username
+        'email':
+            rawEmail.isNotEmpty ? rawEmail : '$cleanUsername@ortu.ebk.sch.id',
+        'phone': account.phone.trim(),
         'is_active': account.isActive,
       };
 
