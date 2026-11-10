@@ -250,11 +250,26 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
   // Toggle Cepat Status Konsultasi
   Future<void> _toggleStatus(ParentConsultationModel item) async {
+    final isPendingRequest = item.isFromRequest &&
+        !item.isCompleted &&
+        (item.requestStatus == 'pending' || item.requestStatus == '');
+
+    // Jika pengajuan wali masih berstatus pending, arahkan ke modal konfirmasi jadwal lebih dulu
+    if (isPendingRequest) {
+      _showConfirmScheduleSheet(item);
+      return;
+    }
+
     final index = _consultations.indexWhere((c) => c.id == item.id);
     if (index == -1) return;
 
-    final newStatus = !_consultations[index].isCompleted;
-    final updatedItem = _consultations[index].copyWith(isCompleted: newStatus);
+    final newCompleted = !_consultations[index].isCompleted;
+    final updatedItem = _consultations[index].copyWith(
+      isCompleted: newCompleted,
+      requestStatus: item.isFromRequest
+          ? (newCompleted ? 'done' : 'approved')
+          : '',
+    );
     setState(() {
       _consultations[index] = updatedItem;
     });
@@ -269,9 +284,11 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     if (!mounted) return;
     ToastNotification.show(
       context,
-      message: newStatus
+      message: newCompleted
           ? 'Konsultasi bersama ${item.parentName} (${item.studentName}) diselesaikan.'
-          : 'Status konsultasi bersama ${item.parentName} dibuka kembali (Dalam Proses).',
+          : (item.isFromRequest
+              ? 'Status konsultasi bersama ${item.parentName} dibuka kembali (Disetujui).'
+              : 'Status konsultasi bersama ${item.parentName} dibuka kembali (Dalam Proses).'),
       type: ToastType.success,
     );
   }
@@ -928,6 +945,286 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     );
   }
 
+  // Modal Sheet: Konfirmasi & Setujui Jadwal Konsultasi Pengajuan Wali
+  void _showConfirmScheduleSheet(ParentConsultationModel item) {
+    final noteCtrl = TextEditingController(
+      text: item.followUpPlan.isNotEmpty
+          ? item.followUpPlan
+          : 'Jadwal konsultasi disetujui. Silakan hadir di Ruang BK tepat waktu.',
+    );
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.pureWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                top: 18.0,
+                left: 20.0,
+                right: 20.0,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24.0,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle Bar
+                    Center(
+                      child: Container(
+                        width: 40.0,
+                        height: 4.0,
+                        decoration: BoxDecoration(
+                          color: AppColors.borderNeutral,
+                          borderRadius: BorderRadius.circular(99.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // Header Title
+                    const Text(
+                      'Konfirmasi Jadwal Konsultasi',
+                      style: AppTextStyles.heading2,
+                    ),
+                    const SizedBox(height: 4.0),
+                    const Text(
+                      'Setujui permohonan sesi konsultasi yang diajukan oleh orang tua/wali murid.',
+                      style: AppTextStyles.subtitle11,
+                    ),
+                    const SizedBox(height: 14.0),
+
+                    // Ringkasan Permohonan Card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12.0),
+                      decoration: BoxDecoration(
+                        color: AppColors.inputSurfaceGray,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(color: AppColors.borderNeutral),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 38.0,
+                                height: 38.0,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(10.0),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.family_restroom_rounded,
+                                  size: 20.0,
+                                  color: AppColors.primaryNavy,
+                                ),
+                              ),
+                              const SizedBox(width: 10.0),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.parentName,
+                                      style: AppTextStyles.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      'Wali dari: ${item.studentName} • ${item.studentClass} (${item.studentNisn})',
+                                      style: AppTextStyles.bodySmall11,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 18.0, color: AppColors.borderNeutral),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today_outlined,
+                                size: 14.0,
+                                color: AppColors.primaryNavy,
+                              ),
+                              const SizedBox(width: 6.0),
+                              Expanded(
+                                child: Text(
+                                  'Waktu: ${item.dateTimeText}',
+                                  style: const TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 12.0,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6.0),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.forum_outlined,
+                                size: 14.0,
+                                color: AppColors.textPlaceholder,
+                              ),
+                              const SizedBox(width: 6.0),
+                              Expanded(
+                                child: Text(
+                                  'Topik: ${item.topic}',
+                                  style: AppTextStyles.bodySmall11,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item.discussionSummary.isNotEmpty) ...[
+                            const SizedBox(height: 8.0),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 6.0,
+                                horizontal: 10.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.pureWhite,
+                                borderRadius: BorderRadius.circular(8.0),
+                                border: Border.all(
+                                  color: AppColors.borderNeutral,
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                'Pesan Wali: "${item.discussionSummary}"',
+                                style: AppTextStyles.bodySmall11.copyWith(
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16.0),
+
+                    // Input Catatan / Lokasi Ruang BK
+                    const Text(
+                      'Catatan Konfirmasi / Ruang BK (Opsional)',
+                      style: AppTextStyles.label,
+                    ),
+                    const SizedBox(height: 6.0),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.pureWhite,
+                        borderRadius: BorderRadius.circular(14.0),
+                        border: Border.all(color: AppColors.borderNeutral),
+                      ),
+                      child: TextField(
+                        controller: noteCtrl,
+                        maxLines: 2,
+                        style: AppTextStyles.body,
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Contoh: Jadwal disetujui. Silakan hadir di Ruang BK menemui Guru BK.',
+                          hintStyle: AppTextStyles.caption,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.all(12.0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20.0),
+
+                    // Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CustomButton(
+                            label: 'Batal',
+                            variant: CustomButtonVariant.outlineNeutral,
+                            height: 48.0,
+                            onPressed: () => Navigator.pop(sheetContext),
+                          ),
+                        ),
+                        const SizedBox(width: 10.0),
+                        Expanded(
+                          flex: 2,
+                          child: CustomButton(
+                            label: isSaving ? 'Menyimpan...' : 'Setujui Jadwal',
+                            leadingIcon: Icons.check_circle_rounded,
+                            height: 48.0,
+                            onPressed: isSaving
+                                ? null
+                                : () async {
+                                    setSheetState(() => isSaving = true);
+                                    final note = noteCtrl.text.trim();
+                                    try {
+                                      final updated =
+                                          await ParentConsultationRepository
+                                              .instance
+                                              .confirmRequest(
+                                        item.id,
+                                        responseNote: note,
+                                      );
+                                      final idx = _consultations
+                                          .indexWhere((c) => c.id == item.id);
+                                      if (idx != -1 && mounted) {
+                                        setState(() {
+                                          _consultations[idx] = updated;
+                                        });
+                                      }
+                                    } catch (_) {
+                                      // Fallback local update
+                                      final idx = _consultations
+                                          .indexWhere((c) => c.id == item.id);
+                                      if (idx != -1 && mounted) {
+                                        setState(() {
+                                          _consultations[idx] = item.copyWith(
+                                            requestStatus: 'approved',
+                                            followUpPlan: note.isNotEmpty
+                                                ? note
+                                                : item.followUpPlan,
+                                          );
+                                        });
+                                      }
+                                    }
+                                    if (sheetContext.mounted) {
+                                      Navigator.pop(sheetContext);
+                                    }
+                                    if (!mounted) return;
+                                    ToastNotification.show(
+                                      context,
+                                      message:
+                                          'Jadwal konsultasi bersama ${item.parentName} berhasil disetujui.',
+                                      type: ToastType.success,
+                                    );
+                                  },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // Modal Sheet: Detail Lengkap Konsultasi Orang Tua
   void _showDetailSheet(ParentConsultationModel item) {
     showModalBottomSheet(
@@ -1044,18 +1341,14 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                         horizontal: 10.0,
                       ),
                       decoration: BoxDecoration(
-                        color: item.isCompleted
-                            ? AppColors.successBg
-                            : AppColors.warningBg,
+                        color: item.statusBgColor,
                         borderRadius: BorderRadius.circular(99.0),
                       ),
                       child: Text(
                         item.statusLabel,
                         style: AppTextStyles.captionSemibold11.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: item.isCompleted
-                              ? AppColors.successText
-                              : AppColors.warningText,
+                          color: item.statusTextColor,
                         ),
                       ),
                     ),
@@ -1192,12 +1485,33 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                       const SizedBox(width: 10.0),
                       Expanded(
                         child: CustomButton(
-                          label:
-                              item.isCompleted ? 'Buka Kembali' : 'Selesaikan',
+                          label: item.isCompleted
+                              ? 'Buka Kembali'
+                              : (item.isFromRequest &&
+                                      !item.isCompleted &&
+                                      (item.requestStatus == 'pending' ||
+                                          item.requestStatus == '')
+                                  ? 'Konfirmasi Jadwal'
+                                  : 'Selesaikan'),
+                          leadingIcon: item.isCompleted
+                              ? Icons.refresh_rounded
+                              : (item.isFromRequest &&
+                                      !item.isCompleted &&
+                                      (item.requestStatus == 'pending' ||
+                                          item.requestStatus == '')
+                                  ? Icons.event_available_rounded
+                                  : Icons.check_rounded),
                           height: 44.0,
                           onPressed: () {
                             Navigator.pop(ctx);
-                            _toggleStatus(item);
+                            if (item.isFromRequest &&
+                                !item.isCompleted &&
+                                (item.requestStatus == 'pending' ||
+                                    item.requestStatus == '')) {
+                              _showConfirmScheduleSheet(item);
+                            } else {
+                              _toggleStatus(item);
+                            }
                           },
                         ),
                       ),
@@ -1580,6 +1894,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                               item: item,
                               onTapDetail: () => _showDetailSheet(item),
                               onEdit: () => _showFormSheet(editItem: item),
+                              onConfirm: () => _showConfirmScheduleSheet(item),
                               onToggleStatus: () => _toggleStatus(item),
                               onDelete: () => _deleteConsultation(item),
                               canDelete: !_isReadOnly,
@@ -1636,6 +1951,7 @@ class _ConsultationCardItem extends StatelessWidget {
   final ParentConsultationModel item;
   final VoidCallback onTapDetail;
   final VoidCallback onEdit;
+  final VoidCallback? onConfirm;
   final VoidCallback onToggleStatus;
   final VoidCallback? onDelete;
   final bool canDelete;
@@ -1645,11 +1961,17 @@ class _ConsultationCardItem extends StatelessWidget {
     required this.item,
     required this.onTapDetail,
     required this.onEdit,
+    this.onConfirm,
     required this.onToggleStatus,
     this.onDelete,
     this.canDelete = true,
     this.isReadOnly = false,
   });
+
+  bool get _isPendingRequest =>
+      item.isFromRequest &&
+      !item.isCompleted &&
+      (item.requestStatus == 'pending' || item.requestStatus == '');
 
   IconData get _methodIcon {
     if (item.consultationMethod.contains('Telepon')) {
@@ -1799,17 +2121,13 @@ class _ConsultationCardItem extends StatelessWidget {
                         horizontal: 10.0,
                       ),
                       decoration: BoxDecoration(
-                        color: item.isCompleted
-                            ? AppColors.successBg
-                            : AppColors.warningBg,
+                        color: item.statusBgColor,
                         borderRadius: BorderRadius.circular(99.0),
                       ),
                       child: Text(
                         item.statusLabel,
                         style: AppTextStyles.captionSemibold11.copyWith(
-                          color: item.isCompleted
-                              ? AppColors.successText
-                              : AppColors.warningText,
+                          color: item.statusTextColor,
                           fontSize: 10.0,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1995,10 +2313,12 @@ class _ConsultationCardItem extends StatelessWidget {
                       ),
                       const SizedBox(width: 8.0),
 
-                      // Tombol 2: Selesaikan / Buka Kembali (Toggle Status)
+                      // Tombol 2: Konfirmasi Jadwal / Selesaikan / Buka Kembali
                       Expanded(
                         child: GestureDetector(
-                          onTap: onToggleStatus,
+                          onTap: _isPendingRequest
+                              ? (onConfirm ?? onToggleStatus)
+                              : onToggleStatus,
                           child: Container(
                             height: 32.0,
                             padding: const EdgeInsets.symmetric(
@@ -2024,7 +2344,9 @@ class _ConsultationCardItem extends StatelessWidget {
                                 Icon(
                                   item.isCompleted
                                       ? Icons.refresh_rounded
-                                      : Icons.check_rounded,
+                                      : (_isPendingRequest
+                                          ? Icons.event_available_rounded
+                                          : Icons.check_rounded),
                                   size: 14.0,
                                   color: item.isCompleted
                                       ? AppColors.textSecondary
@@ -2034,7 +2356,9 @@ class _ConsultationCardItem extends StatelessWidget {
                                 Text(
                                   item.isCompleted
                                       ? 'Buka Kembali'
-                                      : 'Selesaikan',
+                                      : (_isPendingRequest
+                                          ? 'Konfirmasi Jadwal'
+                                          : 'Selesaikan'),
                                   style: TextStyle(
                                     fontFamily: AppTextStyles.fontFamily,
                                     fontSize: 11.0,

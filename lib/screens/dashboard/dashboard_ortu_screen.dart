@@ -1049,11 +1049,8 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                           horizontal: 9.0,
                         ),
                         decoration: BoxDecoration(
-                          color: _latestConsultation?.isCompleted == true
-                              ? AppColors.successBg
-                              : (_latestConsultation?.isFromRequest == true
-                                  ? AppColors.infoBg
-                                  : AppColors.primaryTint),
+                          color: _latestConsultation?.statusBgColor ??
+                              AppColors.primaryTint,
                           borderRadius: BorderRadius.circular(99.0),
                         ),
                         child: Text(
@@ -1061,15 +1058,15 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                               ? (_latestConsultation!.isCompleted
                                   ? 'Selesai'
                                   : (_latestConsultation!.isFromRequest
-                                      ? 'Menunggu BK'
+                                      ? (_latestConsultation!.requestStatus ==
+                                              'approved'
+                                          ? 'Jadwal Disetujui'
+                                          : 'Menunggu Konfirmasi')
                                       : 'Dalam Proses'))
                               : 'Tatap Muka',
                           style: AppTextStyles.badgeSemibold10.copyWith(
-                            color: _latestConsultation?.isCompleted == true
-                                ? AppColors.successText
-                                : (_latestConsultation?.isFromRequest == true
-                                    ? AppColors.infoText
-                                    : AppColors.primaryNavy),
+                            color: _latestConsultation?.statusTextColor ??
+                                AppColors.primaryNavy,
                           ),
                         ),
                       ),
@@ -1133,7 +1130,25 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
-                              if (_latestConsultation?.followUpPlan.isNotEmpty == true) ...[
+                              if (_latestConsultation != null &&
+                                  _latestConsultation!.isFromRequest &&
+                                  _latestConsultation!.requestStatus ==
+                                      'approved') ...[
+                                const SizedBox(height: 3.0),
+                                Text(
+                                  _latestConsultation!.followUpPlan.isNotEmpty
+                                      ? 'Respon BK: ${_latestConsultation!.followUpPlan}'
+                                      : 'Jadwal telah disetujui Guru BK. Silakan hadir di Ruang BK.',
+                                  style: AppTextStyles.captionSemibold11.copyWith(
+                                    color: AppColors.primaryNavy,
+                                    fontSize: 10.5,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ] else if (_latestConsultation
+                                      ?.followUpPlan.isNotEmpty ==
+                                  true) ...[
                                 const SizedBox(height: 3.0),
                                 Text(
                                   'Respon BK: ${_latestConsultation!.followUpPlan}',

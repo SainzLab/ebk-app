@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:pocketbase/pocketbase.dart';
 import '../core/pb_client.dart';
+import '../theme/app_colors.dart';
 
 /// Model Catatan & Riwayat Konsultasi Orang Tua (`09 • Konsultasi Orang Tua (SRS-F-006)`)
 /// Menyimpan informasi orang tua/wali, siswa, waktu, metode komunikasi, topik, hasil diskusi, dan tindak lanjut.
@@ -226,6 +228,26 @@ class ParentConsultationModel {
       return 'Dalam Proses';
     }
     return 'Dalam Proses';
+  }
+
+  Color get statusBgColor {
+    if (isCompleted) return AppColors.successBg;
+    if (isFromRequest) {
+      if (requestStatus == 'approved') return AppColors.primaryTint;
+      if (requestStatus == 'pending') return AppColors.warningBg;
+      return AppColors.warningBg;
+    }
+    return AppColors.warningBg;
+  }
+
+  Color get statusTextColor {
+    if (isCompleted) return AppColors.successText;
+    if (isFromRequest) {
+      if (requestStatus == 'approved') return AppColors.primaryNavy;
+      if (requestStatus == 'pending') return AppColors.warningText;
+      return AppColors.warningText;
+    }
+    return AppColors.warningText;
   }
 
   static List<ParentConsultationModel> getInitialConsultations() {

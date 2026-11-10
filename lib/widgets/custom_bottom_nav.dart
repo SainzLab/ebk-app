@@ -37,7 +37,7 @@ class CustomBottomNav extends StatelessWidget {
       activeIcon: Icons.home_rounded,
     ),
     BottomNavItemData(
-      label: 'Jadwal',
+      label: 'Konseling',
       icon: Icons.calendar_today_outlined,
       activeIcon: Icons.calendar_today_rounded,
     ),

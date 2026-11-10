@@ -106,7 +106,11 @@ class ParentConsultationRepository {
                 'topic': item.topic,
                 'message': item.discussionSummary,
                 'response_note': item.followUpPlan,
-                'status': item.isCompleted ? 'done' : 'approved',
+                'status': item.isCompleted
+                    ? 'done'
+                    : (item.requestStatus.isNotEmpty
+                        ? item.requestStatus
+                        : 'approved'),
               },
               expand: 'student,parent',
             );
@@ -122,6 +126,27 @@ class ParentConsultationRepository {
             expand: 'student,parent,counselor',
           );
       return ParentConsultationModel.fromRecord(rec);
+    } catch (e) {
+      throw AppException.from(e);
+    }
+  }
+
+  /// Konfirmasi & setujui permohonan konsultasi dari orang tua murid (`status = 'approved'`).
+  Future<ParentConsultationModel> confirmRequest(
+    String id, {
+    String? responseNote,
+  }) async {
+    try {
+      final rec = await _pb.collection('consultation_requests').update(
+            id,
+            body: {
+              'status': 'approved',
+              if (responseNote != null && responseNote.isNotEmpty)
+                'response_note': responseNote,
+            },
+            expand: 'student,parent',
+          );
+      return ParentConsultationModel.fromRequestRecord(rec);
     } catch (e) {
       throw AppException.from(e);
     }
