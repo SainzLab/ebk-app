@@ -39,6 +39,34 @@ class CaseRepository {
     return list.where((c) => childIds.contains(c.studentId)).toList();
   }
 
+  /// Ambil seluruh riwayat kasus milik seorang siswa tertentu (satu siswa bisa memiliki banyak kasus).
+  /// Mengambil data murni dari database PocketBase tanpa fallback ke data dummy.
+  Future<List<CaseRecordModel>> getCasesByStudent(
+    StudentDataModel student,
+  ) async {
+    try {
+      List<CaseRecordModel> result = [];
+      if (student.id.isNotEmpty) {
+        try {
+          result = await getCases(filter: "student = '${student.id}'");
+        } catch (_) {}
+      }
+      if (result.isEmpty) {
+        final allCases = await getCases();
+        result = allCases.where((c) {
+          return (c.studentId.isNotEmpty && c.studentId == student.id) ||
+              (c.studentNisn.isNotEmpty && c.studentNisn == student.nisn) ||
+              (c.studentName.toLowerCase().trim() ==
+                  student.name.toLowerCase().trim());
+        }).toList();
+      }
+      return result;
+    } catch (_) {
+      // Murni dari database: kembalikan list kosong jika terjadi kendala/tidak ada kasus
+      return [];
+    }
+  }
+
   /// Cari ID kategori berdasarkan namanya di `case_categories`.
   Future<String?> _resolveCategoryId(String categoryName) async {
     try {

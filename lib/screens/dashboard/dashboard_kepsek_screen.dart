@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/auth_service.dart';
+import '../../core/pb_client.dart';
 import '../../repositories/analytics_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -11,7 +12,7 @@ import '../features/detail_analitik_screen.dart';
 import 'profil_view.dart';
 
 /// Halaman Dashboard Kepala Sekolah (`05 • Dashboard Kepala Sekolah`)
-/// berdasarkan `05-dashboard-kepala-sekolah.png` dan `ebk_design.json`.
+/// Menggunakan filter Range Tanggal dan Tahun sesuai kebutuhan pemantauan pimpinan sekolah.
 class DashboardKepsekScreen extends StatefulWidget {
   final VoidCallback? onLogout;
 
@@ -25,11 +26,23 @@ class DashboardKepsekScreen extends StatefulWidget {
 }
 
 class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
-  int _selectedTimeFilterIndex = 0;
+  KepsekFilterMode _filterMode = KepsekFilterMode.dateRange;
+  DateTime _startDate = DateTime(2026, 11, 1);
+  DateTime _endDate = DateTime(2026, 11, 10);
+  int _selectedYear = 2026;
+
   int _selectedNavIndex = 0;
-  String _totalStudentsStr = '640';
-  String _totalCasesStr = '24';
-  String _completedSessionsStr = '19';
+  bool _isLoading = false;
+  KepsekAnalyticsData? _analyticsData;
+
+  static const List<MonthlyCaseTrend> _defaultMonthlyBars = [
+    MonthlyCaseTrend(month: 'Jun', count: 0, fillHeight: 6.0),
+    MonthlyCaseTrend(month: 'Jul', count: 0, fillHeight: 6.0),
+    MonthlyCaseTrend(month: 'Agu', count: 0, fillHeight: 6.0),
+    MonthlyCaseTrend(month: 'Sep', count: 0, fillHeight: 6.0),
+    MonthlyCaseTrend(month: 'Okt', count: 0, fillHeight: 6.0),
+    MonthlyCaseTrend(month: 'Nov', count: 0, fillHeight: 6.0, isCurrent: true),
+  ];
 
   @override
   void initState() {
@@ -38,26 +51,166 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
   }
 
   Future<void> _loadAnalyticsFromPocketBase() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      final summary = await AnalyticsRepository.instance.getSummary();
-      if (mounted && summary.totalStudents > 0) {
+      final data = await AnalyticsRepository.instance.getKepsekAnalytics(
+        filterMode: _filterMode,
+        startDate: _startDate,
+        endDate: _endDate,
+        selectedYear: _selectedYear,
+      );
+      if (mounted) {
         setState(() {
-          _totalStudentsStr = summary.totalStudents.toString();
-          _totalCasesStr = summary.totalCases.toString();
-          _completedSessionsStr = summary.completedCases.toString();
+          _analyticsData = data;
+          _isLoading = false;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
-  static const List<_MonthlyBarData> _monthlyBars = [
-    _MonthlyBarData(month: 'Jun', count: 16, fillHeight: 36.0),
-    _MonthlyBarData(month: 'Jul', count: 34, fillHeight: 76.0),
-    _MonthlyBarData(month: 'Agu', count: 30, fillHeight: 67.0),
-    _MonthlyBarData(month: 'Sep', count: 27, fillHeight: 60.0),
-    _MonthlyBarData(month: 'Okt', count: 29, fillHeight: 65.0),
-    _MonthlyBarData(month: 'Nov', count: 24, fillHeight: 54.0, isCurrent: true),
-  ];
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _startDate, end: _endDate),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      helpText: 'Pilih Rentang Tanggal Analitik',
+      cancelText: 'Batal',
+      confirmText: 'Terapkan',
+      saveText: 'Terapkan',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryNavy,
+              onPrimary: AppColors.pureWhite,
+              surface: AppColors.pureWhite,
+              onSurface: AppColors.textPrimary,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: AppColors.pureWhite,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryNavy,
+                textStyle: const TextStyle(
+                  fontFamily: AppTextStyles.fontFamily,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _startDate = picked.start;
+        _endDate = picked.end;
+        _selectedYear = picked.start.year;
+      });
+      _loadAnalyticsFromPocketBase();
+    }
+  }
+
+  Future<void> _pickYear() async {
+    final years = [2024, 2025, 2026, 2027, 2028];
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.pureWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20.0)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: 20.0,
+              horizontal: 20.0,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Pilih Tahun Analitik',
+                      style: AppTextStyles.cardTitle,
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 20.0,
+                        color: AppColors.textMuted,
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12.0),
+                ...years.map((year) {
+                  final isSelected = year == _selectedYear;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      Icons.event_note_rounded,
+                      color: isSelected
+                          ? AppColors.primaryNavy
+                          : AppColors.textMuted,
+                    ),
+                    title: Text(
+                      'Tahun $year',
+                      style: TextStyle(
+                        fontFamily: AppTextStyles.fontFamily,
+                        fontSize: 14.0,
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w600,
+                        color: isSelected
+                            ? AppColors.primaryNavy
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.primaryNavy,
+                          )
+                        : null,
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      if (_selectedYear != year) {
+                        setState(() {
+                          _selectedYear = year;
+                          _startDate = DateTime(year, 1, 1);
+                          _endDate = DateTime(year, 12, 31);
+                        });
+                        _loadAnalyticsFromPocketBase();
+                      }
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   void _onNavTap(int index) {
     setState(() {
@@ -118,9 +271,81 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
   }
 
   Widget _buildAnalitikContent() {
+    final data = _analyticsData;
+    final totalStudentsStr = data != null ? data.totalStudents.toString() : '-';
+    final totalCasesStr = data?.totalCases.toString() ?? '0';
+    final completedSessionsStr = data?.completedCases.toString() ?? '0';
+
+    // Badge total kasus
+    final caseBadgeText = data?.caseBadgeText ??
+        (_filterMode == KepsekFilterMode.dateRange ? '0 Kasus' : '0% thn ini');
+    Color caseBadgeBg = AppColors.successBg;
+    Color caseBadgeTextColor = AppColors.successText;
+    if (data != null) {
+      if (data.isCaseDecreased) {
+        caseBadgeBg = AppColors.successBg;
+        caseBadgeTextColor = AppColors.successText;
+      } else if (data.caseChangePercentage > 0) {
+        caseBadgeBg = AppColors.errorSurface;
+        caseBadgeTextColor = AppColors.errorPrimary;
+      } else {
+        caseBadgeBg = AppColors.canvasLightGray;
+        caseBadgeTextColor = AppColors.textSecondary;
+      }
+    }
+
+    // Badge sesi tuntas
+    final completionBadgeText = data?.completionBadgeText ?? '100% Tuntas';
+
+    // Chart bars & subtitle
+    final monthlyBars = (data != null && data.monthlyBars.isNotEmpty)
+        ? data.monthlyBars
+        : _defaultMonthlyBars;
+    final chartSubtitle =
+        data?.trendPeriodSubtitle ?? 'Periode Jun – Nov $_selectedYear';
+
+    // Y Axis labels calculation
+    int maxBarCount = 0;
+    for (final b in monthlyBars) {
+      if (b.count > maxBarCount) maxBarCount = b.count;
+    }
+    final int topY = maxBarCount > 40
+        ? (((maxBarCount + 9) ~/ 10) * 10)
+        : (maxBarCount > 20 ? 40 : 20);
+    final int midY = topY ~/ 2;
+
+    // Trend summary row
+    final isDecreased = data?.isCaseDecreased ?? true;
+    final isIncreased = (data?.caseChangePercentage ?? 0) > 0;
+    final IconData trendIcon = isDecreased
+        ? Icons.trending_down_rounded
+        : (isIncreased
+            ? Icons.trending_up_rounded
+            : Icons.trending_flat_rounded);
+    final Color trendColor = isDecreased
+        ? AppColors.primaryNavy
+        : (isIncreased ? AppColors.errorPrimary : AppColors.primaryNavy);
+    final Color trendBg = isDecreased
+        ? AppColors.primaryTint
+        : (isIncreased ? AppColors.errorSurface : AppColors.primaryTint);
+    final String trendText = data?.trendSummaryText ??
+        'Data analitik siap dipantau untuk periode terpilih.';
+
+    // Label tampilan filter aktif
+    final String activeFilterValue = _filterMode == KepsekFilterMode.dateRange
+        ? (_startDate.isAtSameMomentAs(_endDate)
+            ? PbClient.formatDateFull(_startDate)
+            : '${PbClient.formatDateShort(_startDate)} – ${PbClient.formatDateShort(_endDate)}')
+        : 'Tahun $_selectedYear';
+
     return SafeArea(
       bottom: false,
-      child: SingleChildScrollView(
+      child: RefreshIndicator(
+        onRefresh: _loadAnalyticsFromPocketBase,
+        color: AppColors.primaryNavy,
+        backgroundColor: AppColors.pureWhite,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 20.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -166,11 +391,23 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                         ],
                       ),
                     ),
+                    if (_isLoading)
+                      const SizedBox(
+                        width: 20.0,
+                        height: 20.0,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.primaryNavy,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
               const SizedBox(height: 15.0),
-              // Filter Rentang Waktu (height: 42.0, r=14, pad=4, gap=4)
+
+              // Filter Bar Range Tanggal dan Tahun
               Container(
                 width: double.infinity,
                 height: 42.0,
@@ -187,27 +424,163 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                   children: [
                     Expanded(
                       child: _SegmentedTimeTab(
-                        label: 'Bulan Ini',
-                        isActive: _selectedTimeFilterIndex == 0,
-                        onTap: () => setState(() {
-                          _selectedTimeFilterIndex = 0;
-                        }),
+                        label: 'Tanggal',
+                        icon: Icons.date_range_rounded,
+                        isActive: _filterMode == KepsekFilterMode.dateRange,
+                        onTap: () {
+                          if (_filterMode != KepsekFilterMode.dateRange) {
+                            setState(() {
+                              _filterMode = KepsekFilterMode.dateRange;
+                            });
+                            _loadAnalyticsFromPocketBase();
+                          }
+                        },
                       ),
                     ),
                     const SizedBox(width: 4.0),
                     Expanded(
                       child: _SegmentedTimeTab(
-                        label: 'Semester Ini',
-                        isActive: _selectedTimeFilterIndex == 1,
-                        onTap: () => setState(() {
-                          _selectedTimeFilterIndex = 1;
-                        }),
+                        label: 'Tahun',
+                        icon: Icons.calendar_month_rounded,
+                        isActive: _filterMode == KepsekFilterMode.year,
+                        onTap: () {
+                          if (_filterMode != KepsekFilterMode.year) {
+                            setState(() {
+                              _filterMode = KepsekFilterMode.year;
+                            });
+                            _loadAnalyticsFromPocketBase();
+                          }
+                        },
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 15.0),
+              const SizedBox(height: 8.0),
+
+              // Kartu Selector Interaktif (Pilih Range Tanggal atau Tahun)
+              GestureDetector(
+                onTap: _filterMode == KepsekFilterMode.dateRange
+                    ? _pickDateRange
+                    : _pickYear,
+                behavior: HitTestBehavior.opaque,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14.0,
+                    vertical: 10.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.pureWhite,
+                    borderRadius: BorderRadius.circular(14.0),
+                    border: Border.all(
+                      color: AppColors.borderBlueAccent.withValues(alpha: 0.5),
+                      width: 1.0,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.shadowBase.withValues(alpha: 0.025),
+                        offset: const Offset(0, 2),
+                        blurRadius: 8.0,
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 32.0,
+                            height: 32.0,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryTint,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              _filterMode == KepsekFilterMode.dateRange
+                                  ? Icons.date_range_rounded
+                                  : Icons.calendar_month_rounded,
+                              size: 18.0,
+                              color: AppColors.primaryNavy,
+                            ),
+                          ),
+                          const SizedBox(width: 10.0),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _filterMode == KepsekFilterMode.dateRange
+                                    ? 'Filter Tanggal'
+                                    : 'Filter Tahun',
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.fontFamily,
+                                  fontSize: 10.0,
+                                  height: 13.0 / 10.0,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 2.0),
+                              Text(
+                                activeFilterValue,
+                                style: const TextStyle(
+                                  fontFamily: AppTextStyles.fontFamily,
+                                  fontSize: 12.0,
+                                  height: 16.0 / 12.0,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4.0,
+                          horizontal: 9.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryTint,
+                          borderRadius: BorderRadius.circular(99.0),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              _filterMode == KepsekFilterMode.dateRange
+                                  ? 'Ubah Range'
+                                  : 'Ubah Tahun',
+                              style: const TextStyle(
+                                fontFamily: AppTextStyles.fontFamily,
+                                fontSize: 11.0,
+                                height: 14.0 / 11.0,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.primaryNavy,
+                              ),
+                            ),
+                            const SizedBox(width: 3.0),
+                            const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              size: 15.0,
+                              color: AppColors.primaryNavy,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14.0),
+
               // Tiga Card Statistik Utama (SRS-F-012)
               // Card 1 - Total Siswa Tercatat (height: 86, r=20, fill=#1B3B7B, pad=[16, 18])
               Container(
@@ -252,7 +625,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                           textBaseline: TextBaseline.alphabetic,
                           children: [
                             Text(
-                              _totalStudentsStr,
+                              totalStudentsStr,
                               style: const TextStyle(
                                 fontFamily: AppTextStyles.fontFamily,
                                 fontSize: 28.0,
@@ -298,6 +671,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                 ),
               ),
               const SizedBox(height: 10.0),
+
               // Statistik Row 2 & 3 (height: 118.0, gap: 10.0)
               Row(
                 children: [
@@ -306,11 +680,13 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                       icon: Icons.description_outlined,
                       iconBgColor: AppColors.warningBg,
                       iconColor: AppColors.warningText,
-                      badgeText: '-17% bln ini',
-                      badgeBgColor: AppColors.successBg,
-                      badgeTextColor: AppColors.successText,
-                      value: _totalCasesStr,
-                      label: 'Total Pelanggaran/Kasus',
+                      badgeText: caseBadgeText,
+                      badgeBgColor: caseBadgeBg,
+                      badgeTextColor: caseBadgeTextColor,
+                      value: totalCasesStr,
+                      label: _filterMode == KepsekFilterMode.dateRange
+                          ? 'Kasus pada Rentang Ini'
+                          : 'Total Kasus Tahun $_selectedYear',
                       onTap: () => _onNavTap(1),
                     ),
                   ),
@@ -320,10 +696,10 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                       icon: Icons.check_circle_outline_rounded,
                       iconBgColor: AppColors.successBg,
                       iconColor: AppColors.successText,
-                      badgeText: '79% Tuntas',
+                      badgeText: completionBadgeText,
                       badgeBgColor: AppColors.primaryTint,
                       badgeTextColor: AppColors.primaryNavy,
-                      value: _completedSessionsStr,
+                      value: completedSessionsStr,
                       label: 'Sesi Konseling Selesai',
                       onTap: () => _onNavTap(1),
                     ),
@@ -331,6 +707,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                 ],
               ),
               const SizedBox(height: 15.0),
+
               // Card Chart Tren Kasus Pelanggaran per Bulan (r=22, pad=16, gap=12)
               GestureDetector(
                 onTap: () => _onNavTap(1),
@@ -361,18 +738,18 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
+                                const Text(
                                   'Tren Kasus Pelanggaran per Bulan',
                                   style: AppTextStyles.cardTitle,
                                 ),
-                                SizedBox(height: 2.0),
+                                const SizedBox(height: 2.0),
                                 Text(
-                                  'Periode Jun – Nov 2026',
+                                  chartSubtitle,
                                   style: AppTextStyles.subtitle11,
                                 ),
                               ],
@@ -411,7 +788,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                         ],
                       ),
                       const SizedBox(height: 12.0),
-                      // Placeholder Bar Chart Area (height: 148, r=16, fill=#F8FAFC, stroke=#EEF2F6)
+                      // Bar Chart Area (height: 148, r=16, fill=#F8FAFC, stroke=#EEF2F6)
                       Container(
                         width: double.infinity,
                         height: 148.0,
@@ -434,7 +811,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                           children: [
                             // Y Axis
                             SizedBox(
-                              width: 18.0,
+                              width: 22.0,
                               height: 118.0,
                               child: Padding(
                                 padding: const EdgeInsets.only(
@@ -446,10 +823,10 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: const [
+                                  children: [
                                     Text(
-                                      '40',
-                                      style: TextStyle(
+                                      '$topY',
+                                      style: const TextStyle(
                                         fontFamily: AppTextStyles.fontFamily,
                                         fontSize: 10.0,
                                         height: 12.0 / 10.0,
@@ -458,8 +835,8 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '20',
-                                      style: TextStyle(
+                                      '$midY',
+                                      style: const TextStyle(
                                         fontFamily: AppTextStyles.fontFamily,
                                         fontSize: 10.0,
                                         height: 12.0 / 10.0,
@@ -467,7 +844,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                                         color: AppColors.textPlaceholder,
                                       ),
                                     ),
-                                    Text(
+                                    const Text(
                                       '0',
                                       style: TextStyle(
                                         fontFamily: AppTextStyles.fontFamily,
@@ -481,14 +858,14 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 10.0),
+                            const SizedBox(width: 8.0),
                             // Monthly Bars
                             Expanded(
                               child: Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 crossAxisAlignment: CrossAxisAlignment.end,
-                                children: _monthlyBars.map((bar) {
+                                children: monthlyBars.map((bar) {
                                   return Expanded(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -566,7 +943,7 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                         ),
                       ),
                       const SizedBox(height: 12.0),
-                      // Ringkasan Tren Analitik (height: 32, r=12, fill=#EBF2FF, pad=[8, 12], gap=8)
+                      // Ringkasan Tren Analitik
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
@@ -574,27 +951,27 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
                           horizontal: 12.0,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryTint,
+                          color: trendBg,
                           borderRadius: BorderRadius.circular(12.0),
                         ),
-                        child: const Row(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.trending_down_rounded,
+                              trendIcon,
                               size: 16.0,
-                              color: AppColors.primaryNavy,
+                              color: trendColor,
                             ),
-                            SizedBox(width: 8.0),
+                            const SizedBox(width: 8.0),
                             Expanded(
                               child: Text(
-                                'Kasus pelanggaran turun 17% di bulan November.',
+                                trendText,
                                 style: TextStyle(
                                   fontFamily: AppTextStyles.fontFamily,
                                   fontSize: 11.0,
                                   height: 15.0 / 11.0,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.primaryNavy,
+                                  color: trendColor,
                                 ),
                               ),
                             ),
@@ -608,17 +985,20 @@ class _DashboardKepsekScreenState extends State<DashboardKepsekScreen> {
             ],
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
 class _SegmentedTimeTab extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final bool isActive;
   final VoidCallback onTap;
 
   const _SegmentedTimeTab({
     required this.label,
+    this.icon,
     required this.isActive,
     required this.onTap,
   });
@@ -635,15 +1015,29 @@ class _SegmentedTimeTab extends StatelessWidget {
           borderRadius: BorderRadius.circular(10.0),
         ),
         alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: AppTextStyles.fontFamily,
-            fontSize: 12.0,
-            height: 16.0 / 12.0,
-            fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
-            color: isActive ? AppColors.pureWhite : AppColors.textMuted,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14.0,
+                color: isActive ? AppColors.pureWhite : AppColors.textMuted,
+              ),
+              const SizedBox(width: 6.0),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: AppTextStyles.fontFamily,
+                fontSize: 12.0,
+                height: 16.0 / 12.0,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                color: isActive ? AppColors.pureWhite : AppColors.textMuted,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -776,18 +1170,4 @@ class _ExecStatCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MonthlyBarData {
-  final String month;
-  final int count;
-  final double fillHeight;
-  final bool isCurrent;
-
-  const _MonthlyBarData({
-    required this.month,
-    required this.count,
-    required this.fillHeight,
-    this.isCurrent = false,
-  });
 }

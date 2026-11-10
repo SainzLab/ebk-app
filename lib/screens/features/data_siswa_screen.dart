@@ -12,6 +12,7 @@ import '../../widgets/student_card.dart';
 import '../../widgets/toast_notification.dart';
 import '../dashboard/profil_view.dart';
 import '../states/delete_dialog.dart';
+import 'detail_kasus_screen.dart';
 
 export '../../models/student_model.dart';
 
@@ -35,6 +36,8 @@ class DataSiswaScreen extends StatefulWidget {
   final ValueChanged<CaseRecordModel?>? onOpenDetail;
   final bool isReadOnly;
   final ProfilRole? role;
+  final List<StudentDataModel>? initialStudents;
+  final List<CaseRecordModel>? initialCases;
 
   const DataSiswaScreen({
     super.key,
@@ -42,6 +45,8 @@ class DataSiswaScreen extends StatefulWidget {
     this.onOpenDetail,
     this.isReadOnly = false,
     this.role,
+    this.initialStudents,
+    this.initialCases,
   });
 
   @override
@@ -94,23 +99,52 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
     'Kelas IX-C',
   ];
 
-  List<StudentDataModel> _students = List.from(StudentDataModel.defaultStudents);
+  late List<StudentDataModel> _students;
+  late bool _isLoading;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadStudentsFromPocketBase();
+    if (widget.initialStudents != null) {
+      _students = List.from(widget.initialStudents!);
+      _isLoading = false;
+    } else {
+      _students = [];
+      _isLoading = true;
+      _loadStudentsFromPocketBase();
+    }
   }
 
-  Future<void> _loadStudentsFromPocketBase() async {
+  Future<void> _loadStudentsFromPocketBase({
+    bool showLoadingIndicator = true,
+  }) async {
+    if (showLoadingIndicator) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final list = await StudentRepository.instance.getStudents();
       if (mounted) {
         setState(() {
           _students = list;
+          _isLoading = false;
+          _errorMessage = null;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _students = [];
+          _isLoading = false;
+          _errorMessage = e is AppException
+              ? e.message
+              : 'Gagal memuat data siswa dari database.';
+        });
+      }
+    }
   }
 
   static String _deriveGradeLevel(String className) {
@@ -541,7 +575,7 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
     );
     if (confirmed == true && mounted) {
       try {
-        if (student.id.isNotEmpty && !student.id.startsWith('std-')) {
+        if (student.id.isNotEmpty) {
           await StudentRepository.instance.deleteStudent(student.id);
         }
       } on AppException catch (e) {
@@ -731,43 +765,9 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                 const SizedBox(height: 14.0),
                 // Pintasan Lihat Riwayat Kasus / Catat Kasus
                 GestureDetector(
-                  onTap: () async {
+                  onTap: () {
                     Navigator.of(sheetContext).pop();
-                    CaseRecordModel matchedCase =
-                        CaseRecordModel.defaultCases.firstWhere(
-                      (c) =>
-                          c.studentNisn == student.nisn ||
-                          c.studentName == student.name,
-                      orElse: () => CaseRecordModel.defaultCases.first,
-                    );
-                    try {
-                      final cases = await CaseRepository.instance.getCases();
-                      if (cases.isNotEmpty) {
-                        matchedCase = cases.firstWhere(
-                          (c) =>
-                              c.studentNisn == student.nisn ||
-                              c.studentName == student.name,
-                          orElse: () => cases.first,
-                        );
-                      }
-                    } catch (_) {}
-                    if (!mounted) return;
-                    if (widget.onOpenDetail != null) {
-                      widget.onOpenDetail!(matchedCase);
-                    } else {
-                      Navigator.pushNamed(
-                        context,
-                        '/detail-kasus',
-                        arguments: {
-                          'caseData': matchedCase,
-                          'role': widget.role ??
-                              (_isReadOnly
-                                  ? ProfilRole.kepalaSekolah
-                                  : ProfilRole.guruBk),
-                          'isReadOnly': _isReadOnly,
-                        },
-                      );
-                    }
+                    _showStudentCaseHistorySheet(student);
                   },
                   child: Container(
                     width: double.infinity,
@@ -851,6 +851,22 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _showStudentCaseHistorySheet(StudentDataModel student) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _StudentCaseHistorySheet(
+        student: student,
+        isReadOnly: _isReadOnly,
+        role: widget.role ??
+            (_isReadOnly ? ProfilRole.kepalaSekolah : ProfilRole.guruBk),
+        onOpenDetail: widget.onOpenDetail,
+        initialCases: widget.initialCases,
+      ),
     );
   }
 
@@ -1200,9 +1216,7 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
 
                                   try {
                                     if (isEditing &&
-                                        existingStudent.id.isNotEmpty &&
-                                        !existingStudent.id
-                                            .startsWith('std-')) {
+                                        existingStudent.id.isNotEmpty) {
                                       updated = await StudentRepository.instance
                                           .updateStudent(
                                         existingStudent.id,
@@ -1212,7 +1226,17 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                                       updated = await StudentRepository.instance
                                           .createStudent(updated);
                                     }
-                                  } catch (_) {}
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    ToastNotification.show(
+                                      this.context,
+                                      message: e is AppException
+                                          ? e.message
+                                          : 'Gagal menyimpan data ke database.',
+                                      type: ToastType.error,
+                                    );
+                                    return;
+                                  }
 
                                   if (!mounted) return;
                                   setState(() {
@@ -1622,7 +1646,9 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text(
-                        'Daftar Siswa Aktif (${students.length})',
+                        _isLoading
+                            ? 'Memuat data siswa...'
+                            : 'Daftar Siswa Aktif (${students.length})',
                         style: AppTextStyles.cardTitle,
                       ),
                       const Text(
@@ -1634,58 +1660,126 @@ class _DataSiswaScreenState extends State<DataSiswaScreen> {
                   const SizedBox(height: 14.0),
                   // List Card Siswa (gap: 10.0)
                   Expanded(
-                    child: students.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(
-                                  Icons.search_off_rounded,
-                                  size: 40.0,
-                                  color: AppColors.textPlaceholder,
-                                ),
-                                const SizedBox(height: 8.0),
-                                const Text(
-                                  'Tidak ada siswa yang sesuai filter.',
-                                  style: AppTextStyles.body,
-                                ),
-                                if (_hasActiveFilters) ...[
-                                  const SizedBox(height: 8.0),
-                                  GestureDetector(
-                                    onTap: _resetFilters,
-                                    child: Text(
-                                      'Reset Filter',
-                                      style: AppTextStyles.badgeBold10
-                                          .copyWith(
-                                        color: AppColors.primaryNavy,
-                                        fontSize: 12.0,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
+                    child: _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primaryNavy,
                             ),
                           )
-                        : ListView.separated(
-                            padding: EdgeInsets.only(
-                              bottom: _isReadOnly ? 24.0 : 76.0,
-                            ),
-                            itemCount: students.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 10.0),
-                            itemBuilder: (context, index) {
-                              final student = students[index];
-                              return StudentCard(
-                                name: student.name,
-                                nisn: student.nisn,
-                                className: student.className,
-                                onTap: () => _showStudentDetailSheet(student),
-                                onLongPress: _isReadOnly
-                                    ? null
-                                    : () => _confirmDeleteStudent(student),
-                              );
-                            },
-                          ),
+                        : _errorMessage != null && _students.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24.0,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.cloud_off_rounded,
+                                        size: 44.0,
+                                        color: AppColors.errorPrimary,
+                                      ),
+                                      const SizedBox(height: 12.0),
+                                      Text(
+                                        _errorMessage!,
+                                        style: AppTextStyles.body,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 16.0),
+                                      CustomButton.secondary(
+                                        label: 'Coba Lagi',
+                                        height: 40.0,
+                                        leadingIcon: Icons.refresh_rounded,
+                                        onPressed: () =>
+                                            _loadStudentsFromPocketBase(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : RefreshIndicator(
+                                onRefresh: () => _loadStudentsFromPocketBase(
+                                  showLoadingIndicator: false,
+                                ),
+                                color: AppColors.primaryNavy,
+                                backgroundColor: AppColors.pureWhite,
+                                child: students.isEmpty
+                                    ? ListView(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        children: [
+                                          SizedBox(
+                                            height: MediaQuery.of(context)
+                                                    .size
+                                                    .height *
+                                                0.35,
+                                            child: Center(
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  const Icon(
+                                                    Icons.search_off_rounded,
+                                                    size: 40.0,
+                                                    color: AppColors
+                                                        .textPlaceholder,
+                                                  ),
+                                                  const SizedBox(height: 8.0),
+                                                  Text(
+                                                    _hasActiveFilters
+                                                        ? 'Tidak ada siswa yang sesuai filter.'
+                                                        : 'Belum ada data siswa di database.',
+                                                    style: AppTextStyles.body,
+                                                  ),
+                                                  if (_hasActiveFilters) ...[
+                                                    const SizedBox(height: 8.0),
+                                                    GestureDetector(
+                                                      onTap: _resetFilters,
+                                                      child: Text(
+                                                        'Reset Filter',
+                                                        style: AppTextStyles
+                                                            .badgeBold10
+                                                            .copyWith(
+                                                          color: AppColors
+                                                              .primaryNavy,
+                                                          fontSize: 12.0,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : ListView.separated(
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: EdgeInsets.only(
+                                          bottom: _isReadOnly ? 24.0 : 76.0,
+                                        ),
+                                        itemCount: students.length,
+                                        separatorBuilder: (_, __) =>
+                                            const SizedBox(height: 10.0),
+                                        itemBuilder: (context, index) {
+                                          final student = students[index];
+                                          return StudentCard(
+                                            name: student.name,
+                                            nisn: student.nisn,
+                                            className: student.className,
+                                            onTap: () =>
+                                                _showStudentDetailSheet(student),
+                                            onLongPress: _isReadOnly
+                                                ? null
+                                                : () => _confirmDeleteStudent(
+                                                      student,
+                                                    ),
+                                          );
+                                        },
+                                      ),
+                              ),
                   ),
                   // Home Indicator
                   Center(
@@ -1783,6 +1877,731 @@ class _DetailInfoRow extends StatelessWidget {
                 style: AppTextStyles.cardTitle,
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StudentCaseHistorySheet extends StatefulWidget {
+  final StudentDataModel student;
+  final bool isReadOnly;
+  final ProfilRole role;
+  final ValueChanged<CaseRecordModel>? onOpenDetail;
+  final List<CaseRecordModel>? initialCases;
+
+  const _StudentCaseHistorySheet({
+    required this.student,
+    required this.isReadOnly,
+    required this.role,
+    this.onOpenDetail,
+    this.initialCases,
+  });
+
+  @override
+  State<_StudentCaseHistorySheet> createState() =>
+      _StudentCaseHistorySheetState();
+}
+
+class _StudentCaseHistorySheetState extends State<_StudentCaseHistorySheet> {
+  bool _isLoading = true;
+  List<CaseRecordModel> _cases = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialCases != null) {
+      _cases = widget.initialCases!
+          .where((c) =>
+              (c.studentId.isNotEmpty && c.studentId == widget.student.id) ||
+              (c.studentNisn.isNotEmpty &&
+                  c.studentNisn == widget.student.nisn) ||
+              (c.studentName.toLowerCase().trim() ==
+                  widget.student.name.toLowerCase().trim()))
+          .toList();
+      _isLoading = false;
+    } else {
+      _loadStudentCases();
+    }
+  }
+
+  Future<void> _loadStudentCases() async {
+    try {
+      final list =
+          await CaseRepository.instance.getCasesByStudent(widget.student);
+      if (mounted) {
+        setState(() {
+          _cases = list;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _openDetail(CaseRecordModel caseItem) {
+    if (widget.onOpenDetail != null) {
+      Navigator.of(context).pop();
+      widget.onOpenDetail!(caseItem);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DetailKasusScreen(
+            caseData: caseItem,
+            role: widget.role,
+            isReadOnly: widget.isReadOnly,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalCases = _cases.length;
+    final totalPoints =
+        _cases.fold<int>(0, (sum, c) => sum + c.violationPoints);
+    final completedCount = _cases.where((c) => c.isCompleted).length;
+    final inProgressCount = totalCases - completedCount;
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.canvasLightGray,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header Sheet
+          Container(
+            padding: const EdgeInsets.fromLTRB(20.0, 12.0, 14.0, 14.0),
+            decoration: const BoxDecoration(
+              color: AppColors.pureWhite,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+              border: Border(
+                bottom: BorderSide(
+                  color: AppColors.borderNeutral,
+                  width: 1.0,
+                ),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38.0,
+                    height: 4.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderNeutral,
+                      borderRadius: BorderRadius.circular(2.0),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12.0),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 42.0,
+                      height: 42.0,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryTint,
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.folder_shared_outlined,
+                        size: 22.0,
+                        color: AppColors.primaryNavy,
+                      ),
+                    ),
+                    const SizedBox(width: 12.0),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Riwayat Kasus & Catatan BK',
+                            style: AppTextStyles.captionSemibold11,
+                          ),
+                          const SizedBox(height: 1.0),
+                          Text(
+                            widget.student.name,
+                            style: AppTextStyles.cardTitle.copyWith(
+                              fontSize: 16.0,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 1.0),
+                          Text(
+                            '${widget.student.className} • NISN: ${widget.student.nisn}',
+                            style: AppTextStyles.subtitle11,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        size: 20.0,
+                        color: AppColors.textMuted,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12.0),
+                // Strip Ringkasan Akumulasi
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14.0,
+                    vertical: 10.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.inputSurfaceGray,
+                    borderRadius: BorderRadius.circular(14.0),
+                    border: Border.all(
+                      color: AppColors.borderSoft,
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _StatColumn(
+                        label: 'Total Kasus',
+                        value: '$totalCases Kasus',
+                        valueColor: AppColors.textPrimary,
+                      ),
+                      Container(
+                        width: 1.0,
+                        height: 28.0,
+                        color: AppColors.borderNeutral,
+                      ),
+                      _StatColumn(
+                        label: 'Total Poin',
+                        value: '+$totalPoints Poin',
+                        valueColor: totalPoints > 0
+                            ? AppColors.errorPrimary
+                            : AppColors.successText,
+                      ),
+                      Container(
+                        width: 1.0,
+                        height: 28.0,
+                        color: AppColors.borderNeutral,
+                      ),
+                      _StatColumn(
+                        label: 'Status Kasus',
+                        value: '$inProgressCount Proses • $completedCount Selesai',
+                        valueColor: AppColors.primaryNavy,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Body Daftar Kasus
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primaryNavy,
+                    ),
+                  )
+                : _cases.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 56.0,
+                                height: 56.0,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.successBg,
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.verified_rounded,
+                                  size: 32.0,
+                                  color: AppColors.successText,
+                                ),
+                              ),
+                              const SizedBox(height: 14.0),
+                              const Text(
+                                'Belum Ada Catatan Kasus',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontFamily,
+                                  fontSize: 15.0,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4.0),
+                              Text(
+                                'Ananda ${widget.student.name} tidak memiliki riwayat pelanggaran tata tertib sekolah.',
+                                style: AppTextStyles.subtitle11,
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 14.0),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12.0,
+                                  vertical: 6.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.successBg,
+                                  borderRadius: BorderRadius.circular(99.0),
+                                ),
+                                child: const Text(
+                                  'Catatan Kedisiplinan Bersih (0 Poin)',
+                                  style: TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 11.0,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.successText,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(
+                          20.0,
+                          16.0,
+                          20.0,
+                          16.0,
+                        ),
+                        itemCount: _cases.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: 12.0),
+                        itemBuilder: (ctx, index) {
+                          final c = _cases[index];
+                          return _StudentCaseHistoryCard(
+                            caseItem: c,
+                            onTap: () => _openDetail(c),
+                          );
+                        },
+                      ),
+          ),
+
+          // Bottom Bar
+          Container(
+            padding: const EdgeInsets.fromLTRB(20.0, 12.0, 20.0, 20.0),
+            decoration: const BoxDecoration(
+              color: AppColors.pureWhite,
+              border: Border(
+                top: BorderSide(
+                  color: AppColors.borderNeutral,
+                  width: 1.0,
+                ),
+              ),
+            ),
+            child: SafeArea(
+              top: false,
+              child: CustomButton.secondary(
+                label: 'Tutup Riwayat Kasus',
+                height: 48.0,
+                borderRadius: 12.0,
+                leadingIcon: Icons.close_rounded,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StudentCaseHistoryCard extends StatelessWidget {
+  final CaseRecordModel caseItem;
+  final VoidCallback onTap;
+
+  const _StudentCaseHistoryCard({
+    required this.caseItem,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isCompleted = caseItem.isCompleted;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.pureWhite,
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border.all(
+          color: AppColors.borderNeutral,
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowBase.withValues(alpha: 0.03),
+            offset: const Offset(0, 3),
+            blurRadius: 8.0,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header Kartu
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14.0, 12.0, 14.0, 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0,
+                        vertical: 4.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCompleted
+                            ? AppColors.successBg
+                            : AppColors.warningBg,
+                        borderRadius: BorderRadius.circular(99.0),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isCompleted
+                                ? Icons.check_circle_rounded
+                                : Icons.schedule_rounded,
+                            size: 13.0,
+                            color: isCompleted
+                                ? AppColors.successText
+                                : AppColors.warningText,
+                          ),
+                          const SizedBox(width: 4.0),
+                          Text(
+                            isCompleted ? 'Selesai' : 'Dalam Proses',
+                            style: TextStyle(
+                              fontFamily: AppTextStyles.fontFamily,
+                              fontSize: 10.0,
+                              fontWeight: FontWeight.w700,
+                              color: isCompleted
+                                  ? AppColors.successText
+                                  : AppColors.warningText,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8.0),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8.0,
+                        vertical: 4.0,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.errorSurface,
+                        borderRadius: BorderRadius.circular(99.0),
+                      ),
+                      child: Text(
+                        '+${caseItem.violationPoints} Poin',
+                        style: const TextStyle(
+                          fontFamily: AppTextStyles.fontFamily,
+                          fontSize: 10.0,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.errorPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  caseItem.id,
+                  style: const TextStyle(
+                    fontFamily: AppTextStyles.fontFamily,
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPlaceholder,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Judul Kasus & Kategori
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  caseItem.caseTitle,
+                  style: AppTextStyles.cardTitle.copyWith(fontSize: 14.0),
+                ),
+                const SizedBox(height: 4.0),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7.0,
+                    vertical: 2.0,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.canvasLightGray,
+                    borderRadius: BorderRadius.circular(6.0),
+                  ),
+                  child: Text(
+                    caseItem.caseCategory,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontFamily,
+                      fontSize: 10.0,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10.0),
+
+          // Waktu & Tempat Kejadian
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14.0),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10.0),
+              decoration: BoxDecoration(
+                color: AppColors.inputSurfaceGray,
+                borderRadius: BorderRadius.circular(10.0),
+                border: Border.all(
+                  color: AppColors.borderSoft,
+                  width: 1.0,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time_rounded,
+                        size: 14.0,
+                        color: AppColors.primaryNavy,
+                      ),
+                      const SizedBox(width: 6.0),
+                      Expanded(
+                        child: Text(
+                          caseItem.incidentTime,
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontFamily,
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4.0),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.location_on_outlined,
+                        size: 14.0,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 6.0),
+                      Expanded(
+                        child: Text(
+                          caseItem.incidentLocation,
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontFamily,
+                            fontSize: 11.0,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Kronologi Singkat jika ada
+          if (caseItem.chronology.isNotEmpty) ...[
+            const SizedBox(height: 8.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14.0),
+              child: Text(
+                'Kronologi: ${caseItem.chronology}',
+                style: AppTextStyles.subtitle11.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+
+          // Catatan Penanganan Guru BK jika ada
+          if (caseItem.handling.isNotEmpty) ...[
+            const SizedBox(height: 8.0),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14.0),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8.0),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryTint.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.verified_user_outlined,
+                          size: 12.0,
+                          color: AppColors.primaryNavy,
+                        ),
+                        const SizedBox(width: 5.0),
+                        Text(
+                          'Penanganan oleh ${caseItem.counselorName}',
+                          style: const TextStyle(
+                            fontFamily: AppTextStyles.fontFamily,
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primaryNavy,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2.0),
+                    Text(
+                      caseItem.handling,
+                      style: const TextStyle(
+                        fontFamily: AppTextStyles.fontFamily,
+                        fontSize: 11.0,
+                        color: AppColors.primaryNavy,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10.0),
+
+          // Tombol Buka Detail Kasus
+          InkWell(
+            onTap: onTap,
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(16.0),
+            ),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                vertical: 10.0,
+                horizontal: 14.0,
+              ),
+              decoration: const BoxDecoration(
+                color: AppColors.primaryTint,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(16.0),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  Text(
+                    'Lihat Detail Kasus Lengkap',
+                    style: TextStyle(
+                      fontFamily: AppTextStyles.fontFamily,
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primaryNavy,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 16.0,
+                    color: AppColors.primaryNavy,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatColumn extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  const _StatColumn({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontFamily: AppTextStyles.fontFamily,
+            fontSize: 10.0,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 2.0),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontFamily,
+            fontSize: 12.0,
+            fontWeight: FontWeight.w700,
+            color: valueColor,
           ),
         ),
       ],

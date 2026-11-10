@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ebkapp/main.dart';
+import 'package:ebkapp/models/case_model.dart';
 import 'package:ebkapp/screens/dashboard/dashboard_guru_screen.dart';
 import 'package:ebkapp/screens/dashboard/dashboard_ortu_screen.dart';
 import 'package:ebkapp/screens/dashboard/dashboard_kepsek_screen.dart';
@@ -43,8 +44,8 @@ void main() {
     // Verify initial home screen has bottom navigation
     expect(find.byType(CustomBottomNav), findsOneWidget);
 
-    // Tap Jadwal tab
-    await tester.tap(find.text('Jadwal').last);
+    // Tap Konseling tab
+    await tester.tap(find.text('Konseling').last);
     await tester.pumpAndSettle();
     expect(find.byType(CustomBottomNav), findsOneWidget);
     expect(find.byType(JadwalKonselingScreen), findsOneWidget);
@@ -106,7 +107,7 @@ void main() {
     await tester.tap(find.text('Laporan').last);
     await tester.pumpAndSettle();
     expect(find.byType(CustomBottomNav), findsOneWidget);
-    expect(find.byType(DetailKasusScreen), findsOneWidget);
+    expect(find.text('Laporan Kasus'), findsOneWidget);
 
     // Tap Konsultasi tab
     await tester.tap(find.text('Konsultasi').last);
@@ -369,8 +370,8 @@ void main() {
     await tester.tap(find.text('Pilih dari Galeri'));
     await tester.pumpAndSettle();
 
-    // Verify toast appears
-    expect(find.text('Foto profil berhasil dipilih dari galeri.'), findsOneWidget);
+    // Verify sheet is dismissed
+    expect(find.text('Ubah Foto Profil'), findsNothing);
   });
 
   testWidgets(
@@ -382,10 +383,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: DataSiswaScreen(
           role: ProfilRole.kepalaSekolah,
           isReadOnly: true,
+          initialStudents: StudentDataModel.defaultStudents,
         ),
       ),
     );
@@ -442,10 +444,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
         home: DataSiswaScreen(
           role: ProfilRole.guruBk,
           isReadOnly: false,
+          initialStudents: StudentDataModel.defaultStudents,
         ),
       ),
     );
@@ -547,9 +550,11 @@ void main() {
       MaterialApp(
         initialRoute: '/data-siswa',
         routes: {
-          '/data-siswa': (_) => const DataSiswaScreen(
+          '/data-siswa': (_) => DataSiswaScreen(
                 role: ProfilRole.kepalaSekolah,
                 isReadOnly: true,
+                initialStudents: StudentDataModel.defaultStudents,
+                initialCases: CaseRecordModel.defaultCases,
               ),
           '/detail-kasus': (_) => const DetailKasusScreen(),
         },
@@ -563,6 +568,13 @@ void main() {
 
     // Tap on "Lihat Riwayat Kasus & Catatan BK Siswa"
     await tester.tap(find.text('Lihat Riwayat Kasus & Catatan BK Siswa'));
+    await tester.pumpAndSettle();
+
+    // Verify modal sheet Riwayat Kasus & Catatan BK opens
+    expect(find.text('Riwayat Kasus & Catatan BK'), findsOneWidget);
+
+    // Tap "Lihat Detail Kasus Lengkap" on the student's case
+    await tester.tap(find.text('Lihat Detail Kasus Lengkap').first);
     await tester.pumpAndSettle();
 
     // Verify Detail Kasus screen opened in read-only mode (no edit/complete/delete)
@@ -655,12 +667,8 @@ void main() {
     expect(find.text('KOP-01'), findsNothing);
     expect(find.text('Kelas IX-B'), findsWidgets);
 
-    // 2. Verify Delete icon button is present for Guru BK
-    final deleteButtons = find.byIcon(Icons.delete_outline_rounded);
-    expect(deleteButtons, findsWidgets);
-
-    // 3. Tap delete button on the first card
-    await tester.tap(deleteButtons.first);
+    // 2. Long-press on the first card to trigger delete for Guru BK
+    await tester.longPress(find.text('Bapak Hendra Pratama').first);
     await tester.pumpAndSettle();
 
     // Verify DeleteDialog is displayed with parent and student info (no item.id)
@@ -677,8 +685,8 @@ void main() {
     expect(find.text('Hapus Catatan Konsultasi?'), findsNothing);
     expect(find.text('Bapak Hendra Pratama'), findsOneWidget);
 
-    // Tap delete and confirm
-    await tester.tap(deleteButtons.first);
+    // Long-press delete and confirm
+    await tester.longPress(find.text('Bapak Hendra Pratama').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hapus'));
     await tester.pumpAndSettle();

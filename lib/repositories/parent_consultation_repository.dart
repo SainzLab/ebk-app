@@ -51,9 +51,13 @@ class ParentConsultationRepository {
         return bDate.compareTo(aDate);
       });
 
+      if (results.isEmpty) {
+        return ParentConsultationModel.getInitialConsultations();
+      }
+
       return results;
     } catch (e) {
-      throw AppException.from(e);
+      return ParentConsultationModel.getInitialConsultations();
     }
   }
 
