@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/auth_service.dart';
 import '../../models/parent_consultation_model.dart';
 import '../../repositories/parent_consultation_repository.dart';
+import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
 import '../../widgets/custom_button.dart';
@@ -89,6 +90,8 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     {'name': 'Budi Santoso', 'class': 'Kelas VII-A', 'nisn': '0103456789'},
   ];
 
+  List<Map<String, String>> _studentOptions = List.from(_availableStudents);
+
   @override
   void initState() {
     super.initState();
@@ -107,6 +110,21 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
       if (mounted) {
         setState(() {
           _consultations = list;
+        });
+      }
+      final students = await StudentRepository.instance.getStudents();
+      if (mounted && students.isNotEmpty) {
+        setState(() {
+          _studentOptions = students
+              .map(
+                (s) => {
+                  'id': s.id,
+                  'name': s.name,
+                  'class': s.className,
+                  'nisn': s.nisn,
+                },
+              )
+              .toList();
         });
       }
     } catch (_) {}
@@ -206,9 +224,21 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
     // Pengurutan (Sorting)
     if (_sortBy == 'Terbaru (Waktu Pertemuan)') {
-      // Mock list urutan awal sudah kronologis terbaru
+      list.sort((a, b) {
+        final aDate =
+            a.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate =
+            b.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
     } else if (_sortBy == 'Terlama') {
-      list.sort((a, b) => a.id.compareTo(b.id));
+      list.sort((a, b) {
+        final aDate =
+            a.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate =
+            b.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return aDate.compareTo(bDate);
+      });
     } else if (_sortBy == 'Nama Wali Murid (A – Z)') {
       list.sort((a, b) => a.parentName.compareTo(b.parentName));
     } else if (_sortBy == 'Nama Siswa (A – Z)') {
@@ -258,8 +288,10 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     if (confirmed == true && mounted) {
       try {
         if (!item.id.startsWith('KOP-')) {
-          await ParentConsultationRepository.instance
-              .deleteConsultation(item.id);
+          await ParentConsultationRepository.instance.deleteConsultation(
+            item.id,
+            isFromRequest: item.isFromRequest,
+          );
         }
       } catch (_) {}
 
@@ -513,11 +545,24 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
     final followUpCtrl =
         TextEditingController(text: isEdit ? editItem.followUpPlan : '');
 
-    Map<String, String> selectedStudent = _availableStudents.first;
+    final studentList = List<Map<String, String>>.from(
+      _studentOptions.isNotEmpty ? _studentOptions : _availableStudents,
+    );
+    if (isEdit &&
+        editItem.studentName.isNotEmpty &&
+        !studentList.any((s) => s['name'] == editItem.studentName)) {
+      studentList.insert(0, {
+        'id': editItem.studentId,
+        'name': editItem.studentName,
+        'class': editItem.studentClass,
+        'nisn': editItem.studentNisn,
+      });
+    }
+    Map<String, String> selectedStudent = studentList.first;
     if (isEdit) {
-      final found = _availableStudents.firstWhere(
+      final found = studentList.firstWhere(
         (s) => s['name'] == editItem.studentName,
-        orElse: () => _availableStudents.first,
+        orElse: () => studentList.first,
       );
       selectedStudent = found;
     }
@@ -600,7 +645,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                             Icons.keyboard_arrow_down_rounded,
                             color: AppColors.primaryNavy,
                           ),
-                          items: _availableStudents.map((s) {
+                          items: studentList.map((s) {
                             return DropdownMenuItem<Map<String, String>>(
                               value: s,
                               child: Text(
@@ -809,6 +854,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                               .indexWhere((c) => c.id == editItem.id);
                           if (idx != -1) {
                             var updatedItem = _consultations[idx].copyWith(
+                              studentId: selectedStudent['id'] ?? editItem.studentId,
                               parentName: waliCtrl.text.trim(),
                               studentName: selectedStudent['name']!,
                               studentClass: selectedStudent['class']!,
@@ -837,6 +883,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                           final newId = 'KOP-0${_consultations.length + 1}';
                           var newItem = ParentConsultationModel(
                             id: newId,
+                            studentId: selectedStudent['id'] ?? '',
                             parentName: waliCtrl.text.trim(),
                             studentName: selectedStudent['name']!,
                             studentClass: selectedStudent['class']!,
@@ -921,6 +968,42 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                   children: [
                     Row(
                       children: [
+                        if (item.isFromRequest) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 4.0,
+                              horizontal: 8.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.infoBg,
+                              borderRadius: BorderRadius.circular(99.0),
+                              border: Border.all(
+                                color: AppColors.infoBorder,
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.inbox_outlined,
+                                  size: 11.0,
+                                  color: AppColors.infoText,
+                                ),
+                                const SizedBox(width: 4.0),
+                                Text(
+                                  'Pengajuan Wali',
+                                  style: AppTextStyles.captionSemibold11.copyWith(
+                                    color: AppColors.infoText,
+                                    fontSize: 10.0,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6.0),
+                        ],
                         Container(
                           padding: const EdgeInsets.symmetric(
                             vertical: 4.0,
@@ -982,6 +1065,26 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
                 // Topik Utama
                 Text(item.topic, style: AppTextStyles.heading2),
+                if (item.topicCategory.isNotEmpty) ...[
+                  const SizedBox(height: 4.0),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 2.0,
+                      horizontal: 8.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.inputSurfaceGray,
+                      borderRadius: BorderRadius.circular(6.0),
+                    ),
+                    child: Text(
+                      'Kategori: ${item.topicCategory}',
+                      style: AppTextStyles.captionSemibold11.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 10.0,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4.0),
                 Text(item.dateTimeText, style: AppTextStyles.subtitle11),
                 const SizedBox(height: 14.0),
@@ -1028,26 +1131,38 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                 ),
                 const SizedBox(height: 14.0),
 
-                // Hasil Diskusi
-                const Text('Hasil Diskusi / Konsultasi:',
-                    style: AppTextStyles.label),
+                // Hasil Diskusi / Catatan Wali
+                Text(
+                  item.isFromRequest
+                      ? 'Pesan / Catatan Permohonan Wali:'
+                      : 'Hasil Diskusi / Konsultasi:',
+                  style: AppTextStyles.label,
+                ),
                 const SizedBox(height: 4.0),
                 Text(
                   item.discussionSummary.isNotEmpty
                       ? item.discussionSummary
-                      : 'Belum ada catatan ringkasan hasil diskusi.',
+                      : (item.isFromRequest
+                          ? 'Tidak ada pesan tertulis dari wali murid.'
+                          : 'Belum ada catatan ringkasan hasil diskusi.'),
                   style: AppTextStyles.body,
                 ),
                 const SizedBox(height: 14.0),
 
-                // Tindak Lanjut
-                const Text('Rencana Tindak Lanjut Bersama:',
-                    style: AppTextStyles.label),
+                // Tindak Lanjut / Respon BK
+                Text(
+                  item.isFromRequest
+                      ? 'Tanggapan Guru BK / Rencana Sesi:'
+                      : 'Rencana Tindak Lanjut Bersama:',
+                  style: AppTextStyles.label,
+                ),
                 const SizedBox(height: 4.0),
                 Text(
                   item.followUpPlan.isNotEmpty
                       ? item.followUpPlan
-                      : 'Belum ada rencana tindak lanjut tercatat.',
+                      : (item.isFromRequest
+                          ? 'Belum ada tanggapan/catatan dari Guru BK.'
+                          : 'Belum ada rencana tindak lanjut tercatat.'),
                   style: AppTextStyles.body,
                 ),
                 const SizedBox(height: 20.0),
@@ -1237,9 +1352,13 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
 
                 // Expanded Scrollable Content
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.only(bottom: 96.0),
-                    children: [
+                  child: RefreshIndicator(
+                    onRefresh: _loadConsultationsFromPocketBase,
+                    color: AppColors.primaryNavy,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.only(bottom: 96.0),
+                      children: [
                       // Bilah Pencarian Siswa & Wali
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -1471,6 +1590,7 @@ class _CatatKonsultasiScreenState extends State<CatatKonsultasiScreen> {
                     ],
                   ),
                 ),
+              ),
               ],
             ),
 
@@ -1636,6 +1756,42 @@ class _ConsultationCardItem extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8.0),
+                    if (item.isFromRequest) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4.0,
+                          horizontal: 8.0,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.infoBg,
+                          borderRadius: BorderRadius.circular(99.0),
+                          border: Border.all(
+                            color: AppColors.infoBorder,
+                            width: 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.inbox_outlined,
+                              size: 11.0,
+                              color: AppColors.infoText,
+                            ),
+                            const SizedBox(width: 4.0),
+                            Text(
+                              'Pengajuan Wali',
+                              style: AppTextStyles.captionSemibold11.copyWith(
+                                color: AppColors.infoText,
+                                fontSize: 10.0,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6.0),
+                    ],
                     // Badge Status (Tanpa Dot)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1734,8 +1890,34 @@ class _ConsultationCardItem extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8.0),
                     ),
                     child: Text(
-                      'Hasil: ${item.discussionSummary}',
+                      item.isFromRequest
+                          ? 'Pesan Wali: ${item.discussionSummary}'
+                          : 'Hasil: ${item.discussionSummary}',
                       style: AppTextStyles.bodySmall11,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+
+                // Tanggapan Guru BK jika permohonan konsultasi wali telah direspon
+                if (item.isFromRequest && item.followUpPlan.isNotEmpty) ...[
+                  const SizedBox(height: 6.0),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6.0,
+                      horizontal: 10.0,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoBg,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    child: Text(
+                      'Tanggapan BK: ${item.followUpPlan}',
+                      style: AppTextStyles.bodySmall11.copyWith(
+                        color: AppColors.infoText,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

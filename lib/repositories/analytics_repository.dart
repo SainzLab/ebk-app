@@ -136,6 +136,10 @@ class AnalyticsRepository {
             .collection('consultation_requests')
             .getList(page: 1, perPage: 1, filter: "status = 'pending'");
         pendingRequests = reqList.totalItems;
+        final allReqList = await _pb
+            .collection('consultation_requests')
+            .getList(page: 1, perPage: 1);
+        totalConsultations += allReqList.totalItems;
       } catch (_) {}
 
       return DashboardAnalyticsSummary(

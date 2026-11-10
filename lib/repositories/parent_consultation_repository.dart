@@ -16,12 +16,42 @@ class ParentConsultationRepository {
     String? filter,
   }) async {
     try {
-      final records = await _pb.collection('parent_consultations').getFullList(
-            filter: filter,
-            sort: '-held_at,-created',
-            expand: 'student,parent,counselor',
-          );
-      return records.map(ParentConsultationModel.fromRecord).toList();
+      final results = <ParentConsultationModel>[];
+
+      // 1. Ambil pengajuan konsultasi dari orang tua (`consultation_requests`)
+      try {
+        final reqRecords =
+            await _pb.collection('consultation_requests').getFullList(
+                  filter: filter,
+                  sort: '-created',
+                  expand: 'student,parent',
+                );
+        results.addAll(
+          reqRecords.map(ParentConsultationModel.fromRequestRecord),
+        );
+      } catch (_) {}
+
+      // 2. Ambil catatan konsultasi orang tua (`parent_consultations`)
+      try {
+        final records =
+            await _pb.collection('parent_consultations').getFullList(
+                  filter: filter,
+                  sort: '-held_at,-created',
+                  expand: 'student,parent,counselor',
+                );
+        results.addAll(records.map(ParentConsultationModel.fromRecord));
+      } catch (_) {}
+
+      // Urutkan seluruh hasil (gabungan requests dan consultations) terbaru lebih dulu
+      results.sort((a, b) {
+        final aDate =
+            a.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate =
+            b.consultationDate ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+
+      return results;
     } catch (e) {
       throw AppException.from(e);
     }
@@ -67,6 +97,22 @@ class ParentConsultationRepository {
               className: item.studentClass,
               guardianName: item.parentName,
             );
+
+      if (item.isFromRequest) {
+        final rec = await _pb.collection('consultation_requests').update(
+              item.id,
+              body: {
+                if (studentId.isNotEmpty) 'student': studentId,
+                'topic': item.topic,
+                'message': item.discussionSummary,
+                'response_note': item.followUpPlan,
+                'status': item.isCompleted ? 'done' : 'approved',
+              },
+              expand: 'student,parent',
+            );
+        return ParentConsultationModel.fromRequestRecord(rec);
+      }
+
       final rec = await _pb.collection('parent_consultations').update(
             item.id,
             body: item.toJson(
@@ -81,9 +127,20 @@ class ParentConsultationRepository {
     }
   }
 
-  Future<void> deleteConsultation(String id) async {
+  Future<void> deleteConsultation(
+    String id, {
+    bool isFromRequest = false,
+  }) async {
     try {
-      await _pb.collection('parent_consultations').delete(id);
+      if (isFromRequest) {
+        await _pb.collection('consultation_requests').delete(id);
+        return;
+      }
+      try {
+        await _pb.collection('parent_consultations').delete(id);
+      } catch (_) {
+        await _pb.collection('consultation_requests').delete(id);
+      }
     } catch (e) {
       throw AppException.from(e);
     }

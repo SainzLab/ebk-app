@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../core/auth_service.dart';
 import '../../models/case_model.dart';
+import '../../models/parent_consultation_model.dart';
 import '../../models/student_model.dart';
 import '../../repositories/case_repository.dart';
+import '../../repositories/parent_consultation_repository.dart';
 import '../../repositories/student_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_text_styles.dart';
@@ -166,6 +168,7 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
   String _selectedChildId = ''; // '' = semua anak
   bool _isLoadingCases = true;
   String? _loadError;
+  ParentConsultationModel? _latestConsultation;
 
   // Search & Filter State untuk Tab Laporan Kasus
   final TextEditingController _searchController = TextEditingController();
@@ -216,10 +219,20 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
     try {
       final myChildren = await StudentRepository.instance.getMyChildren();
       final myCases = await CaseRepository.instance.getMyCases(myChildren);
+      ParentConsultationModel? latestCons;
+      try {
+        final consultations =
+            await ParentConsultationRepository.instance.getConsultations();
+        if (consultations.isNotEmpty) {
+          latestCons = consultations.first;
+        }
+      } catch (_) {}
+
       if (!mounted) return;
       setState(() {
         _children = myChildren;
         _cases = myCases;
+        _latestConsultation = latestCons;
         _isLoadingCases = false;
         if (_selectedChildId.isNotEmpty &&
             !myChildren.any((c) => c.id == _selectedChildId)) {
@@ -768,11 +781,25 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
     return 'Wali dari ${_children.length} Siswa ($names)';
   }
 
+  Future<void> _loadLatestConsultation() async {
+    try {
+      final consultations =
+          await ParentConsultationRepository.instance.getConsultations();
+      if (!mounted) return;
+      setState(() {
+        _latestConsultation = consultations.isNotEmpty ? consultations.first : null;
+      });
+    } catch (_) {}
+  }
+
   void _onNavTap(int index) {
     setState(() {
       if (index == 1) _selectedCase = null; // tampilkan daftar kasus
       _selectedNavIndex = index;
     });
+    if (index == 0) {
+      _loadLatestConsultation();
+    }
   }
 
   Future<void> _handleLogout() async {
@@ -840,6 +867,10 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
             AjukanKonsultasiScreen(
               isEmbedded: true,
               onBack: () => setState(() => _selectedNavIndex = 0),
+              onSubmitSuccess: () {
+                _loadLatestConsultation();
+                setState(() => _selectedNavIndex = 0);
+              },
             ),
             ProfilView(
               role: ProfilRole.orangTua,
@@ -998,9 +1029,13 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      const Text(
-                        'Jadwal Konsultasi Terdekat',
-                        style: TextStyle(
+                      Text(
+                        _latestConsultation != null
+                            ? (_latestConsultation!.isFromRequest
+                                ? 'Permohonan Konsultasi'
+                                : 'Jadwal Konsultasi Terdekat')
+                            : 'Jadwal Konsultasi Terdekat',
+                        style: const TextStyle(
                           fontFamily: AppTextStyles.fontFamily,
                           fontSize: 13.0,
                           height: 18.0 / 13.0,
@@ -1014,12 +1049,28 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                           horizontal: 9.0,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.primaryTint,
+                          color: _latestConsultation?.isCompleted == true
+                              ? AppColors.successBg
+                              : (_latestConsultation?.isFromRequest == true
+                                  ? AppColors.infoBg
+                                  : AppColors.primaryTint),
                           borderRadius: BorderRadius.circular(99.0),
                         ),
-                        child: const Text(
-                          'Tatap Muka',
-                          style: AppTextStyles.badgeSemibold10,
+                        child: Text(
+                          _latestConsultation != null
+                              ? (_latestConsultation!.isCompleted
+                                  ? 'Selesai'
+                                  : (_latestConsultation!.isFromRequest
+                                      ? 'Menunggu BK'
+                                      : 'Dalam Proses'))
+                              : 'Tatap Muka',
+                          style: AppTextStyles.badgeSemibold10.copyWith(
+                            color: _latestConsultation?.isCompleted == true
+                                ? AppColors.successText
+                                : (_latestConsultation?.isFromRequest == true
+                                    ? AppColors.infoText
+                                    : AppColors.primaryNavy),
+                          ),
                         ),
                       ),
                     ],
@@ -1054,14 +1105,18 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                           ),
                         ),
                         const SizedBox(width: 12.0),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Selasa, 10 Nov 2026 • 10:00 WIB',
-                                style: TextStyle(
+                                _latestConsultation != null
+                                    ? (_latestConsultation!.dateTimeText.isNotEmpty
+                                        ? _latestConsultation!.dateTimeText
+                                        : _latestConsultation!.topic)
+                                    : 'Selasa, 10 Nov 2026 • 10:00 WIB',
+                                style: const TextStyle(
                                   fontFamily: AppTextStyles.fontFamily,
                                   fontSize: 12.0,
                                   height: 17.0 / 12.0,
@@ -1069,11 +1124,27 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
                                   color: AppColors.textPrimary,
                                 ),
                               ),
-                              SizedBox(height: 2.0),
+                              const SizedBox(height: 2.0),
                               Text(
-                                'Ruang BK • Ibu Dra. Nurhayati, S.Pd.',
+                                _latestConsultation != null
+                                    ? '${_latestConsultation!.topic} • ${_latestConsultation!.studentName}'
+                                    : 'Ruang BK • Ibu Dra. Nurhayati, S.Pd.',
                                 style: AppTextStyles.subtitle11,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
+                              if (_latestConsultation?.followUpPlan.isNotEmpty == true) ...[
+                                const SizedBox(height: 3.0),
+                                Text(
+                                  'Respon BK: ${_latestConsultation!.followUpPlan}',
+                                  style: AppTextStyles.captionSemibold11.copyWith(
+                                    color: AppColors.infoText,
+                                    fontSize: 10.5,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ],
                           ),
                         ),

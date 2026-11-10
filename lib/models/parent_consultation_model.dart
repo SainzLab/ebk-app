@@ -17,6 +17,10 @@ class ParentConsultationModel {
   final String discussionSummary;
   final String followUpPlan;
   final bool isCompleted;
+  final bool isFromRequest;
+  final String topicCategory;
+  final String requestStatus; // 'pending', 'approved', 'rejected', 'done'
+  final DateTime? consultationDate;
 
   const ParentConsultationModel({
     required this.id,
@@ -32,6 +36,10 @@ class ParentConsultationModel {
     required this.discussionSummary,
     required this.followUpPlan,
     this.isCompleted = false,
+    this.isFromRequest = false,
+    this.topicCategory = '',
+    this.requestStatus = '',
+    this.consultationDate,
   });
 
   ParentConsultationModel copyWith({
@@ -48,6 +56,10 @@ class ParentConsultationModel {
     String? discussionSummary,
     String? followUpPlan,
     bool? isCompleted,
+    bool? isFromRequest,
+    String? topicCategory,
+    String? requestStatus,
+    DateTime? consultationDate,
   }) {
     return ParentConsultationModel(
       id: id ?? this.id,
@@ -63,6 +75,10 @@ class ParentConsultationModel {
       discussionSummary: discussionSummary ?? this.discussionSummary,
       followUpPlan: followUpPlan ?? this.followUpPlan,
       isCompleted: isCompleted ?? this.isCompleted,
+      isFromRequest: isFromRequest ?? this.isFromRequest,
+      topicCategory: topicCategory ?? this.topicCategory,
+      requestStatus: requestStatus ?? this.requestStatus,
+      consultationDate: consultationDate ?? this.consultationDate,
     );
   }
 
@@ -104,6 +120,79 @@ class ParentConsultationModel {
       discussionSummary: r.getStringValue('discussion_summary'),
       followUpPlan: r.getStringValue('follow_up_plan'),
       isCompleted: r.getBoolValue('is_completed'),
+      isFromRequest: false,
+      consultationDate: DateTime.tryParse(r.getStringValue('held_at')) ??
+          DateTime.tryParse(r.getStringValue('created')),
+      requestStatus: '',
+    );
+  }
+
+  /// Konversi record dari collection `consultation_requests` (pengajuan wali murid)
+  /// agar langsung tampil dan dapat dikelola pada menu Konsultasi Orang Tua (Guru BK).
+  factory ParentConsultationModel.fromRequestRecord(RecordModel r) {
+    final expandedStudents = r.get<List<RecordModel>>('expand.student');
+    final studentRec =
+        expandedStudents.isNotEmpty ? expandedStudents.first : null;
+
+    final expandedParents = r.get<List<RecordModel>>('expand.parent');
+    final parentRec =
+        expandedParents.isNotEmpty ? expandedParents.first : null;
+
+    final parentNameFromUser = parentRec?.getStringValue('name') ?? '';
+    final parentUsername = parentRec?.getStringValue('username') ?? '';
+    final guardianName = studentRec?.getStringValue('guardian_name') ?? '';
+
+    final pName = parentNameFromUser.isNotEmpty
+        ? parentNameFromUser
+        : (guardianName.isNotEmpty
+            ? guardianName
+            : (parentUsername.isNotEmpty ? parentUsername : 'Orang Tua Siswa'));
+
+    final prefDate = r.getStringValue('preferred_date').trim();
+    final prefTime = r.getStringValue('preferred_time').trim();
+    final rawCreated = r.getStringValue('created');
+    final parsedCreated = DateTime.tryParse(rawCreated);
+    final parsedPrefDate = DateTime.tryParse(prefDate);
+    String dtText = '';
+    if (prefDate.isNotEmpty) {
+      final datePart = parsedPrefDate != null
+          ? PbClient.formatDateFull(parsedPrefDate)
+          : prefDate;
+      if (prefTime.isNotEmpty) {
+        final timePart = prefTime.toUpperCase().contains('WIB')
+            ? prefTime
+            : '$prefTime WIB';
+        dtText = '$datePart • $timePart';
+      } else {
+        dtText = datePart;
+      }
+    } else {
+      dtText = parsedCreated != null
+          ? PbClient.formatDateTimeWib(parsedCreated)
+          : rawCreated;
+    }
+
+    final rawStatus = r.getStringValue('status');
+    final isDone = rawStatus == 'done';
+
+    return ParentConsultationModel(
+      id: r.id,
+      parentId: r.getStringValue('parent'),
+      studentId: r.getStringValue('student'),
+      parentName: pName,
+      studentName: studentRec?.getStringValue('name') ?? 'Siswa',
+      studentClass: studentRec?.getStringValue('class_name') ?? '-',
+      studentNisn: studentRec?.getStringValue('nisn') ?? '-',
+      dateTimeText: dtText,
+      consultationMethod: 'Tatap Muka di Ruang BK',
+      topic: r.getStringValue('topic'),
+      discussionSummary: r.getStringValue('message'),
+      followUpPlan: r.getStringValue('response_note'),
+      isCompleted: isDone,
+      isFromRequest: true,
+      topicCategory: r.getStringValue('topic_category'),
+      requestStatus: rawStatus,
+      consultationDate: parsedPrefDate ?? parsedCreated,
     );
   }
 
@@ -129,7 +218,15 @@ class ParentConsultationModel {
     };
   }
 
-  String get statusLabel => isCompleted ? 'Selesai' : 'Dalam Proses';
+  String get statusLabel {
+    if (isCompleted) return 'Selesai';
+    if (isFromRequest) {
+      if (requestStatus == 'pending') return 'Menunggu Konfirmasi';
+      if (requestStatus == 'approved') return 'Disetujui';
+      return 'Dalam Proses';
+    }
+    return 'Dalam Proses';
+  }
 
   static List<ParentConsultationModel> getInitialConsultations() {
     return [

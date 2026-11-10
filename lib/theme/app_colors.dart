@@ -116,6 +116,12 @@ class AppColors {
   static const Color errorIcon = Color(0xFF991B1B);
   static const Color errorDarkText = Color(0xFF7F1D1D);
 
+  /// Status Info / Pengajuan Wali (Light Blue)
+  static const Color infoSurface = Color(0xFFEFF6FF);
+  static const Color infoBg = Color(0xFFDBEAFE);
+  static const Color infoBorder = Color(0xFFBFDBFE);
+  static const Color infoText = Color(0xFF1D4ED8);
+
   // ===========================================================================
   // 05. Skeleton, Scrim & Dark Mode Tokens
   // ===========================================================================
