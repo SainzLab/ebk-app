@@ -812,6 +812,487 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
     }
   }
 
+  void _showConsultationDetailSheet(ParentConsultationModel item) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: AppColors.modalBackdrop,
+      builder: (sheetContext) {
+        return Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(sheetContext).size.height * 0.88,
+          ),
+          decoration: const BoxDecoration(
+            color: AppColors.pureWhite,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24.0)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 12.0),
+                // Handle Bar
+                Center(
+                  child: Container(
+                    width: 44.0,
+                    height: 4.0,
+                    decoration: BoxDecoration(
+                      color: AppColors.borderMuted,
+                      borderRadius: BorderRadius.circular(99.0),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14.0),
+
+                // Header Top
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 34.0,
+                            height: 34.0,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryTint,
+                              borderRadius: BorderRadius.circular(10.0),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.calendar_month_rounded,
+                              size: 18.0,
+                              color: AppColors.primaryNavy,
+                            ),
+                          ),
+                          const SizedBox(width: 10.0),
+                          const Text(
+                            'Detail Jadwal Konsultasi',
+                            style: AppTextStyles.topBarTitle,
+                          ),
+                        ],
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.of(sheetContext).pop(),
+                        child: Container(
+                          width: 30.0,
+                          height: 30.0,
+                          decoration: const BoxDecoration(
+                            color: AppColors.inputSurfaceGray,
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 17.0,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12.0),
+                const Divider(color: AppColors.borderNeutral, height: 1.0),
+
+                // Content Scrollable
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Badges Row (Status, Metode, Kategori)
+                        Wrap(
+                          spacing: 6.0,
+                          runSpacing: 6.0,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4.0,
+                                horizontal: 10.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: item.statusBgColor,
+                                borderRadius: BorderRadius.circular(99.0),
+                              ),
+                              child: Text(
+                                item.statusLabel,
+                                style: AppTextStyles.captionSemibold11.copyWith(
+                                  color: item.statusTextColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 10.5,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 4.0,
+                                horizontal: 10.0,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryTint,
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              child: Text(
+                                item.consultationMethod,
+                                style: AppTextStyles.badgeBold10,
+                              ),
+                            ),
+                            if (item.topicCategory.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 4.0,
+                                  horizontal: 9.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.canvasLightGray,
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  border: Border.all(
+                                    color: AppColors.borderNeutral,
+                                  ),
+                                ),
+                                child: Text(
+                                  item.topicCategory,
+                                  style: AppTextStyles.badgeSemibold10,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12.0),
+
+                        // Judul Topik
+                        Text(
+                          item.topic,
+                          style: AppTextStyles.heading1.copyWith(
+                            fontSize: 16.0,
+                            height: 22.0 / 16.0,
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+
+                        // Card Waktu & Lokasi
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14.0),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTint.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(16.0),
+                            border: Border.all(
+                              color: AppColors.borderBlueTint,
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildDetailRow(
+                                icon: Icons.access_time_rounded,
+                                title: 'Waktu Pertemuan',
+                                value: item.dateTimeText.isNotEmpty
+                                    ? item.dateTimeText
+                                    : 'Selasa, 10 Nov 2026 • 10:00 WIB',
+                                valueColor: AppColors.primaryNavy,
+                                isBold: true,
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 10.0),
+                                child: Divider(
+                                  color: AppColors.borderBlueTint,
+                                  height: 1.0,
+                                ),
+                              ),
+                              _buildDetailRow(
+                                icon: item.consultationMethod.toLowerCase().contains('telepon')
+                                    ? Icons.phone_in_talk_rounded
+                                    : (item.consultationMethod.toLowerCase().contains('home')
+                                        ? Icons.home_rounded
+                                        : Icons.meeting_room_rounded),
+                                title: 'Tempat / Media Konsultasi',
+                                value: item.consultationMethod.toLowerCase().contains('telepon')
+                                    ? 'Panggilan Telepon / WhatsApp Guru BK'
+                                    : (item.consultationMethod.toLowerCase().contains('home')
+                                        ? 'Home Visit (Kunjungan ke Kediaman Siswa)'
+                                        : 'Ruang Bimbingan Konseling (BK) SMPN 1 Pabuaran'),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 10.0),
+                                child: Divider(
+                                  color: AppColors.borderBlueTint,
+                                  height: 1.0,
+                                ),
+                              ),
+                              _buildDetailRow(
+                                icon: Icons.person_pin_rounded,
+                                title: 'Guru BK Pembimbing',
+                                value: 'Dra. Hj. Siti Aminah, M.Pd. (Koordinator BK)',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+
+                        // Card Data Siswa Terkait
+                        const Text(
+                          'Data Siswa & Wali Murid',
+                          style: AppTextStyles.label,
+                        ),
+                        const SizedBox(height: 6.0),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            color: AppColors.inputSurfaceGray,
+                            borderRadius: BorderRadius.circular(14.0),
+                            border: Border.all(
+                              color: AppColors.borderNeutral,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 42.0,
+                                height: 42.0,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(12.0),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.school_rounded,
+                                  color: AppColors.primaryNavy,
+                                  size: 22.0,
+                                ),
+                              ),
+                              const SizedBox(width: 12.0),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.studentName.isNotEmpty
+                                          ? item.studentName
+                                          : 'Rizky Pratama',
+                                      style: AppTextStyles.label.copyWith(
+                                        fontSize: 13.0,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2.0),
+                                    Text(
+                                      '${item.studentClass} • NISN: ${item.studentNisn}',
+                                      style: AppTextStyles.bodySmall11,
+                                    ),
+                                    const SizedBox(height: 2.0),
+                                    Text(
+                                      'Wali: ${item.parentName}',
+                                      style: AppTextStyles.subtitle11.copyWith(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+
+                        // Catatan Permohonan / Hasil Pembahasan
+                        Text(
+                          item.isFromRequest
+                              ? 'Catatan Permohonan Wali Murid:'
+                              : 'Ringkasan Pokok Diskusi:',
+                          style: AppTextStyles.label,
+                        ),
+                        const SizedBox(height: 6.0),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            color: AppColors.pureWhite,
+                            borderRadius: BorderRadius.circular(12.0),
+                            border: Border.all(
+                              color: AppColors.borderNeutral,
+                            ),
+                          ),
+                          child: Text(
+                            item.discussionSummary.isNotEmpty
+                                ? item.discussionSummary
+                                : 'Tidak ada catatan permohonan tambahan.',
+                            style: AppTextStyles.body.copyWith(
+                              height: 19.0 / 13.0,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14.0),
+
+                        // Respon / Arahan Tindak Lanjut Guru BK
+                        Text(
+                          item.isFromRequest
+                              ? 'Respon & Tindak Lanjut Guru BK:'
+                              : 'Rencana Tindak Lanjut Bersama:',
+                          style: AppTextStyles.label,
+                        ),
+                        const SizedBox(height: 6.0),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(12.0),
+                            border: Border.all(
+                              color: const Color(0xFFBBF7D0),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                size: 18.0,
+                                color: Color(0xFF16A34A),
+                              ),
+                              const SizedBox(width: 10.0),
+                              Expanded(
+                                child: Text(
+                                  item.followUpPlan.isNotEmpty
+                                      ? item.followUpPlan
+                                      : (item.isCompleted
+                                          ? 'Sesi konsultasi telah selesai dilaksanakan sesuai rencana.'
+                                          : 'Jadwal telah terkonfirmasi. Silakan hadir di Ruang BK tepat waktu.'),
+                                  style: const TextStyle(
+                                    fontFamily: AppTextStyles.fontFamily,
+                                    fontSize: 12.5,
+                                    height: 18.0 / 12.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF15803D),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16.0),
+
+                        // Petunjuk Kehadiran Ortu Info Box
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12.0),
+                          decoration: BoxDecoration(
+                            color: AppColors.inputSurfaceGray,
+                            borderRadius: BorderRadius.circular(12.0),
+                            border: Border.all(
+                              color: AppColors.borderNeutral,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              Icon(
+                                Icons.info_outline_rounded,
+                                size: 16.0,
+                                color: AppColors.primaryNavy,
+                              ),
+                              SizedBox(width: 8.0),
+                              Expanded(
+                                child: Text(
+                                  'Catatan: Mohon tiba di sekolah 10 menit sebelum jam konsultasi dimulai. Anda dapat membawa buku catatan atau data pendukung ananda bila diperlukan.',
+                                  style: AppTextStyles.subtitle11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20.0),
+
+                        // Tombol Aksi
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CustomButton.secondary(
+                                label: 'Tutup',
+                                height: 44.0,
+                                onPressed: () =>
+                                    Navigator.of(sheetContext).pop(),
+                              ),
+                            ),
+                            const SizedBox(width: 10.0),
+                            Expanded(
+                              child: CustomButton.primary(
+                                label: 'Ajukan Baru',
+                                height: 44.0,
+                                leadingIcon: Icons.add_circle_outline_rounded,
+                                onPressed: () {
+                                  Navigator.of(sheetContext).pop();
+                                  setState(() {
+                                    _selectedNavIndex = 2; // Pindah ke tab Ajukan Konsultasi
+                                  });
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String title,
+    required String value,
+    Color? valueColor,
+    bool isBold = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 18.0,
+          color: AppColors.primaryNavy,
+        ),
+        const SizedBox(width: 10.0),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTextStyles.subtitle11.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2.0),
+              Text(
+                value,
+                style: TextStyle(
+                  fontFamily: AppTextStyles.fontFamily,
+                  fontSize: 12.5,
+                  height: 17.0 / 12.5,
+                  fontWeight: isBold ? FontWeight.w700 : FontWeight.w600,
+                  color: valueColor ?? AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -998,176 +1479,234 @@ class _DashboardOrtuScreenState extends State<DashboardOrtuScreen> {
               ],
             ),
             const SizedBox(height: 10.0),
-            // Card Jadwal Konsultasi Terdekat
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(
-                vertical: 14.0,
-                horizontal: 15.0,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.pureWhite,
-                borderRadius: BorderRadius.circular(18.0),
-                border: Border.all(
-                  color: AppColors.borderBlueTint,
-                  width: 1.0,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryNavy.withValues(alpha: 0.059),
-                    offset: const Offset(0, 6),
-                    blurRadius: 16.0,
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Judul Jadwal Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(
-                        _latestConsultation != null
-                            ? (_latestConsultation!.isFromRequest
-                                ? 'Permohonan Konsultasi'
-                                : 'Jadwal Konsultasi Terdekat')
-                            : 'Jadwal Konsultasi Terdekat',
-                        style: const TextStyle(
-                          fontFamily: AppTextStyles.fontFamily,
-                          fontSize: 13.0,
-                          height: 18.0 / 13.0,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryNavy,
-                        ),
+            // Card Jadwal Konsultasi Terdekat (Interaktif - Ketuk untuk melihat detail spesifik)
+            Builder(
+              builder: (context) {
+                final effectiveConsultation = _latestConsultation ??
+                    (ParentConsultationModel.getInitialConsultations().isNotEmpty
+                        ? ParentConsultationModel.getInitialConsultations().first
+                        : null);
+
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      if (effectiveConsultation != null) {
+                        _showConsultationDetailSheet(effectiveConsultation);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(18.0),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 14.0,
+                        horizontal: 15.0,
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 3.0,
-                          horizontal: 9.0,
+                      decoration: BoxDecoration(
+                        color: AppColors.pureWhite,
+                        borderRadius: BorderRadius.circular(18.0),
+                        border: Border.all(
+                          color: AppColors.borderBlueTint,
+                          width: 1.0,
                         ),
-                        decoration: BoxDecoration(
-                          color: _latestConsultation?.statusBgColor ??
-                              AppColors.primaryTint,
-                          borderRadius: BorderRadius.circular(99.0),
-                        ),
-                        child: Text(
-                          _latestConsultation != null
-                              ? (_latestConsultation!.isCompleted
-                                  ? 'Selesai'
-                                  : (_latestConsultation!.isFromRequest
-                                      ? (_latestConsultation!.requestStatus ==
-                                              'approved'
-                                          ? 'Jadwal Disetujui'
-                                          : 'Menunggu Konfirmasi')
-                                      : 'Dalam Proses'))
-                              : 'Tatap Muka',
-                          style: AppTextStyles.badgeSemibold10.copyWith(
-                            color: _latestConsultation?.statusTextColor ??
-                                AppColors.primaryNavy,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryNavy.withValues(alpha: 0.059),
+                            offset: const Offset(0, 6),
+                            blurRadius: 16.0,
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10.0),
-                  // Detail Jadwal Row
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 10.0,
-                      horizontal: 12.0,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.inputSurfaceGray,
-                      borderRadius: BorderRadius.circular(12.0),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 38.0,
-                          height: 38.0,
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryTint,
-                            borderRadius: BorderRadius.circular(11.0),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.calendar_today_outlined,
-                            size: 20.0,
-                            color: AppColors.primaryNavy,
-                          ),
-                        ),
-                        const SizedBox(width: 12.0),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Judul Jadwal Row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Text(
-                                _latestConsultation != null
-                                    ? (_latestConsultation!.dateTimeText.isNotEmpty
-                                        ? _latestConsultation!.dateTimeText
-                                        : _latestConsultation!.topic)
-                                    : 'Selasa, 10 Nov 2026 • 10:00 WIB',
-                                style: const TextStyle(
-                                  fontFamily: AppTextStyles.fontFamily,
-                                  fontSize: 12.0,
-                                  height: 17.0 / 12.0,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 2.0),
-                              Text(
-                                _latestConsultation != null
-                                    ? '${_latestConsultation!.topic} • ${_latestConsultation!.studentName}'
-                                    : 'Ruang BK • Ibu Dra. Nurhayati, S.Pd.',
-                                style: AppTextStyles.subtitle11,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              if (_latestConsultation != null &&
-                                  _latestConsultation!.isFromRequest &&
-                                  _latestConsultation!.requestStatus ==
-                                      'approved') ...[
-                                const SizedBox(height: 3.0),
-                                Text(
-                                  _latestConsultation!.followUpPlan.isNotEmpty
-                                      ? 'Respon BK: ${_latestConsultation!.followUpPlan}'
-                                      : 'Jadwal telah disetujui Guru BK. Silakan hadir di Ruang BK.',
-                                  style: AppTextStyles.captionSemibold11.copyWith(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    effectiveConsultation != null
+                                        ? (effectiveConsultation.isFromRequest
+                                            ? 'Permohonan Konsultasi'
+                                            : 'Jadwal Konsultasi Terdekat')
+                                        : 'Jadwal Konsultasi Terdekat',
+                                    style: const TextStyle(
+                                      fontFamily: AppTextStyles.fontFamily,
+                                      fontSize: 13.0,
+                                      height: 18.0 / 13.0,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryNavy,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4.0),
+                                  const Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18.0,
                                     color: AppColors.primaryNavy,
-                                    fontSize: 10.5,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                ],
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3.0,
+                                  horizontal: 9.0,
                                 ),
-                              ] else if (_latestConsultation
-                                      ?.followUpPlan.isNotEmpty ==
-                                  true) ...[
-                                const SizedBox(height: 3.0),
-                                Text(
-                                  'Respon BK: ${_latestConsultation!.followUpPlan}',
-                                  style: AppTextStyles.captionSemibold11.copyWith(
-                                    color: AppColors.infoText,
-                                    fontSize: 10.5,
+                                decoration: BoxDecoration(
+                                  color: effectiveConsultation?.statusBgColor ??
+                                      AppColors.primaryTint,
+                                  borderRadius: BorderRadius.circular(99.0),
+                                ),
+                                child: Text(
+                                  effectiveConsultation != null
+                                      ? (effectiveConsultation.isCompleted
+                                          ? 'Selesai'
+                                          : (effectiveConsultation.isFromRequest
+                                              ? (effectiveConsultation.requestStatus ==
+                                                      'approved'
+                                                  ? 'Jadwal Disetujui'
+                                                  : 'Menunggu Konfirmasi')
+                                              : 'Dalam Proses'))
+                                      : 'Tatap Muka',
+                                  style: AppTextStyles.badgeSemibold10.copyWith(
+                                    color: effectiveConsultation?.statusTextColor ??
+                                        AppColors.primaryNavy,
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 10.0),
+                          // Detail Jadwal Row
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 10.0,
+                              horizontal: 12.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.inputSurfaceGray,
+                              borderRadius: BorderRadius.circular(12.0),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 38.0,
+                                  height: 38.0,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryTint,
+                                    borderRadius: BorderRadius.circular(11.0),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Icon(
+                                    Icons.calendar_today_outlined,
+                                    size: 20.0,
+                                    color: AppColors.primaryNavy,
+                                  ),
+                                ),
+                                const SizedBox(width: 12.0),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        effectiveConsultation != null
+                                            ? (effectiveConsultation.dateTimeText.isNotEmpty
+                                                ? effectiveConsultation.dateTimeText
+                                                : effectiveConsultation.topic)
+                                            : 'Selasa, 10 Nov 2026 • 10:00 WIB',
+                                        style: const TextStyle(
+                                          fontFamily: AppTextStyles.fontFamily,
+                                          fontSize: 12.0,
+                                          height: 17.0 / 12.0,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2.0),
+                                      Text(
+                                        effectiveConsultation != null
+                                            ? '${effectiveConsultation.topic} • ${effectiveConsultation.studentName}'
+                                            : 'Ruang BK • Ibu Dra. Nurhayati, S.Pd.',
+                                        style: AppTextStyles.subtitle11,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (effectiveConsultation != null &&
+                                          effectiveConsultation.isFromRequest &&
+                                          effectiveConsultation.requestStatus ==
+                                              'approved') ...[
+                                        const SizedBox(height: 3.0),
+                                        Text(
+                                          effectiveConsultation.followUpPlan.isNotEmpty
+                                              ? 'Respon BK: ${effectiveConsultation.followUpPlan}'
+                                              : 'Jadwal telah disetujui Guru BK. Silakan hadir di Ruang BK.',
+                                          style: AppTextStyles.captionSemibold11.copyWith(
+                                            color: AppColors.primaryNavy,
+                                            fontSize: 10.5,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ] else if (effectiveConsultation
+                                              ?.followUpPlan.isNotEmpty ==
+                                          true) ...[
+                                        const SizedBox(height: 3.0),
+                                        Text(
+                                          'Respon BK: ${effectiveConsultation?.followUpPlan ?? ""}',
+                                          style: AppTextStyles.captionSemibold11.copyWith(
+                                            color: AppColors.infoText,
+                                            fontSize: 10.5,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6.0),
+                                const Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 13.0,
+                                  color: AppColors.textMuted,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 8.0),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: const [
+                              Text(
+                                'Ketuk untuk melihat detail jadwal',
+                                style: TextStyle(
+                                  fontFamily: AppTextStyles.fontFamily,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                              SizedBox(width: 3.0),
+                              Icon(
+                                Icons.touch_app_outlined,
+                                size: 12.0,
+                                color: AppColors.textMuted,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
             const SizedBox(height: 10.0),
             // CTA Sekunder - Ajukan Konsultasi Baru
